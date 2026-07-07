@@ -22,6 +22,11 @@ jobs:
 
       - uses: android-actions/setup-android@v3
 
+      - name: Accept licenses & install SDK 36
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-36" "build-tools;36.0.0" > /dev/null 2>&1 || true
+
       - name: Install dependencies
         run: npm install
 
@@ -45,7 +50,7 @@ jobs:
       - name: Build APK
         run: |
           cd android
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug --no-daemon --console=plain
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
