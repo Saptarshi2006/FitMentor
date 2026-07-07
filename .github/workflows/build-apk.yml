@@ -32,16 +32,16 @@ jobs:
 
       - name: Init Capacitor & add Android
         run: |
-          npx cap init FitMentor ai.fitmentor.app --web-dir dist
+          ./node_modules/.bin/cap init FitMentor ai.fitmentor.app --web-dir dist
           mkdir -p dist
           printf '<html><body>FitMentor</body></html>\n' > dist/index.html
-          npx cap add android
+          ./node_modules/.bin/cap add android
 
       - name: Configure server URL & copy
         run: |
           rm -f capacitor.config.ts
           printf '{"appId":"ai.fitmentor.app","appName":"FitMentor","webDir":"dist","server":{"url":"https://fitmentor-ai-ruddy.vercel.app","cleartext":false,"androidScheme":"https"}}\n' > capacitor.config.json
-          npx cap copy android
+          ./node_modules/.bin/cap copy android
 
       - name: Build APK
         run: |
