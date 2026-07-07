@@ -24,27 +24,21 @@ jobs:
 
       - name: Accept licenses & install SDK 36
         run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-36" "build-tools;36.0.0" > /dev/null 2>&1 || true
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-36" "build-tools;36.0.0" || true
 
       - name: Install dependencies
         run: npm install
 
-      - name: Build web app
-        run: npm run build
-
       - name: Setup Capacitor
         run: |
-          npm install @capacitor/core @capacitor/cli @capacitor/android
-          npx @capacitor/cli init --web-dir dist FitMentor ai.fitmentor.app
+          echo '{"appId":"ai.fitmentor.app","appName":"FitMentor","webDir":"dist","server":{"url":"https://fitmentor-ai-ruddy.vercel.app","cleartext":false,"androidScheme":"https"}}' > capacitor.config.json
 
-      - name: Add Android platform
-        run: npx cap add android
-
-      - name: Copy web build to Android
+      - name: Add Android platform & copy
         run: |
           mkdir -p dist
-          cp -r .vercel/output/static/* dist/ 2>/dev/null || true
+          echo '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta http-equiv="refresh" content="0;url=https://fitmentor-ai-ruddy.vercel.app"><title>FitMentor</title></head><body></body></html>' > dist/index.html
+          npx cap add android
           npx cap copy
 
       - name: Build APK
