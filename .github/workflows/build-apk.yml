@@ -30,21 +30,17 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Setup Capacitor & add Android platform
+      - name: Init Capacitor & add Android
         run: |
-          echo "--- Writing config ---"
-          node -e '
-            const fs = require("fs");
-            const config = {appId:"ai.fitmentor.app",appName:"FitMentor",webDir:"dist",server:{url:"https://fitmentor-ai-ruddy.vercel.app",cleartext:false,androidScheme:"https"}};
-            fs.mkdirSync("dist",{recursive:true});
-            fs.writeFileSync("capacitor.config.json",JSON.stringify(config,null,2));
-            fs.writeFileSync("dist/index.html","<!DOCTYPE html><html><head><meta charset=UTF-8><title>FitMentor</title></head><body></body></html>");
-          '
-          echo "--- Files created ---"
-          ls -la capacitor.config.json dist/index.html
-          echo "--- Running cap add android ---"
+          npx cap init FitMentor ai.fitmentor.app --web-dir dist
+          mkdir -p dist
+          printf '<html><body>FitMentor</body></html>\n' > dist/index.html
           npx cap add android
-          echo "--- Running cap copy ---"
+
+      - name: Configure server URL & copy
+        run: |
+          rm -f capacitor.config.ts
+          printf '{"appId":"ai.fitmentor.app","appName":"FitMentor","webDir":"dist","server":{"url":"https://fitmentor-ai-ruddy.vercel.app","cleartext":false,"androidScheme":"https"}}\n' > capacitor.config.json
           npx cap copy android
 
       - name: Build APK
