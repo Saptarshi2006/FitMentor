@@ -19,6 +19,7 @@ export interface Profile {
   diet: Diet;
   daysPerWeek: number;
   budgetPerDay: number; // INR
+  healthConditions: string[]; // e.g. ["diabetes", "heart_disease", "none"]
   createdAt: string;
 }
 

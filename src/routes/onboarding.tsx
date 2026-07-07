@@ -2,7 +2,15 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { saveProfile, type Profile, type Goal, type Place, type Diet, type Experience, type Gender } from "@/lib/profile";
+import {
+  saveProfile,
+  type Profile,
+  type Goal,
+  type Place,
+  type Diet,
+  type Experience,
+  type Gender,
+} from "@/lib/profile";
 import { ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logoImg from "@/assets/logo-v2.png";
@@ -12,7 +20,18 @@ export const Route = createFileRoute("/onboarding")({
   component: Onboarding,
 });
 
-type Step = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+type Step = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+
+const HEALTH_OPTIONS = [
+  { v: "none", l: "None (I'm healthy)", e: "✅" },
+  { v: "diabetes", l: "Diabetes", e: "🩸" },
+  { v: "heart_disease", l: "Heart Disease", e: "❤️" },
+  { v: "bp", l: "High / Low BP", e: "🩺" },
+  { v: "thyroid", l: "Thyroid", e: "🔬" },
+  { v: "asthma", l: "Asthma", e: "🫁" },
+  { v: "joint", l: "Joint / Back Pain", e: "🦴" },
+  { v: "other", l: "Other", e: "📋" },
+];
 
 function Onboarding() {
   const navigate = useNavigate();
@@ -25,10 +44,25 @@ function Onboarding() {
     experience: "beginner",
     gender: "male",
     goal: "muscle_gain",
+    healthConditions: [],
   });
 
   const next = () => setStep((s) => (s + 1) as Step);
   const back = () => setStep((s) => Math.max(0, s - 1) as Step);
+
+  const toggleHealth = (v: string) => {
+    const current = draft.healthConditions ?? [];
+    if (v === "none") {
+      setDraft({ ...draft, healthConditions: current.includes("none") ? [] : ["none"] });
+      return;
+    }
+    const filtered = current.filter((c) => c !== "none");
+    if (filtered.includes(v)) {
+      setDraft({ ...draft, healthConditions: filtered.filter((c) => c !== v) });
+    } else {
+      setDraft({ ...draft, healthConditions: [...filtered, v] });
+    }
+  };
 
   const finish = () => {
     const p: Profile = {
@@ -43,20 +77,24 @@ function Onboarding() {
       diet: (draft.diet as Diet) ?? "veg",
       daysPerWeek: Number(draft.daysPerWeek ?? 4),
       budgetPerDay: Number(draft.budgetPerDay ?? 150),
+      healthConditions: draft.healthConditions ?? [],
       createdAt: new Date().toISOString(),
     };
     saveProfile(p);
     navigate({ to: "/" });
   };
 
-  const totalSteps = 8;
+  const totalSteps = 9;
 
   return (
     <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col bg-background px-6 pt-14 pb-8">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-80 [background:var(--gradient-glow)]" />
       <div className="relative flex items-center gap-3">
         {step > 0 ? (
-          <button onClick={back} className="rounded-full p-2 text-muted-foreground hover:text-foreground">
+          <button
+            onClick={back}
+            className="rounded-full p-2 text-muted-foreground hover:text-foreground"
+          >
             <ChevronLeft className="h-5 w-5" />
           </button>
         ) : (
@@ -64,15 +102,16 @@ function Onboarding() {
         )}
         <div className="flex flex-1 gap-1.5">
           {Array.from({ length: totalSteps }).map((_, i) => (
-            <div key={i} className={cn("h-1 flex-1 rounded-full", i <= step ? "bg-primary" : "bg-muted")} />
+            <div
+              key={i}
+              className={cn("h-1 flex-1 rounded-full", i <= step ? "bg-primary" : "bg-muted")}
+            />
           ))}
         </div>
       </div>
 
       <div className="relative mt-10 flex-1">
-        {step === 0 && (
-          <Welcome onNext={next} />
-        )}
+        {step === 0 && <Welcome onNext={next} />}
         {step === 1 && (
           <Field title="What should we call you?" sub="Just a first name works.">
             <Input
@@ -87,7 +126,12 @@ function Onboarding() {
         {step === 2 && (
           <Field title="Tell us about you" sub="We'll calculate your needs.">
             <div className="grid grid-cols-2 gap-3">
-              <NumInput label="Age" value={draft.age} onChange={(v) => setDraft({ ...draft, age: v })} suffix="yrs" />
+              <NumInput
+                label="Age"
+                value={draft.age}
+                onChange={(v) => setDraft({ ...draft, age: v })}
+                suffix="yrs"
+              />
               <Select
                 label="Gender"
                 value={draft.gender ?? "male"}
@@ -98,8 +142,18 @@ function Onboarding() {
                 ]}
                 onChange={(v) => setDraft({ ...draft, gender: v as Gender })}
               />
-              <NumInput label="Height" value={draft.heightCm} onChange={(v) => setDraft({ ...draft, heightCm: v })} suffix="cm" />
-              <NumInput label="Weight" value={draft.weightKg} onChange={(v) => setDraft({ ...draft, weightKg: v })} suffix="kg" />
+              <NumInput
+                label="Height"
+                value={draft.heightCm}
+                onChange={(v) => setDraft({ ...draft, heightCm: v })}
+                suffix="cm"
+              />
+              <NumInput
+                label="Weight"
+                value={draft.weightKg}
+                onChange={(v) => setDraft({ ...draft, weightKg: v })}
+                suffix="kg"
+              />
             </div>
           </Field>
         )}
@@ -154,11 +208,43 @@ function Onboarding() {
               className="w-full accent-[var(--primary)]"
             />
             <div className="mt-2 flex justify-between text-xs text-muted-foreground">
-              <span>2</span><span>3</span><span>4</span><span>5</span><span>6</span>
+              <span>2</span>
+              <span>3</span>
+              <span>4</span>
+              <span>5</span>
+              <span>6</span>
             </div>
           </Field>
         )}
         {step === 7 && (
+          <Field
+            title="Any health conditions?"
+            sub="We'll keep your workouts safe. Select all that apply."
+          >
+            <div className="space-y-2">
+              {HEALTH_OPTIONS.map((o) => {
+                const selected = draft.healthConditions?.includes(o.v) ?? false;
+                return (
+                  <button
+                    key={o.v}
+                    onClick={() => toggleHealth(o.v)}
+                    className={cn(
+                      "flex w-full items-center gap-4 rounded-2xl border p-4 text-left transition",
+                      selected
+                        ? "border-primary bg-primary/10 shadow-glow"
+                        : "border-border/60 bg-card hover:border-primary/40",
+                    )}
+                  >
+                    <span className="text-2xl">{o.e}</span>
+                    <span className="font-semibold">{o.l}</span>
+                    {selected && <span className="ml-auto text-primary">✓</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
+        )}
+        {step === 8 && (
           <Field title="Food & budget" sub="We'll suggest meals you can actually afford.">
             <Choices
               value={draft.diet}
@@ -170,7 +256,9 @@ function Onboarding() {
               ]}
             />
             <div className="mt-4">
-              <label className="mb-2 block text-sm text-muted-foreground">Food budget: ₹{draft.budgetPerDay}/day</label>
+              <label className="mb-2 block text-sm text-muted-foreground">
+                Food budget: ₹{draft.budgetPerDay}/day
+              </label>
               <input
                 type="range"
                 min={80}
@@ -186,12 +274,16 @@ function Onboarding() {
       </div>
 
       <div className="relative mt-6">
-        {step === 0 ? null : step < 7 ? (
+        {step === 0 ? null : step < 8 ? (
           <Button size="lg" className="h-14 w-full text-base font-semibold" onClick={next}>
             Continue
           </Button>
         ) : (
-          <Button size="lg" className="h-14 w-full bg-gradient-hero text-base font-semibold text-primary-foreground shadow-glow" onClick={finish}>
+          <Button
+            size="lg"
+            className="h-14 w-full bg-gradient-hero text-base font-semibold text-primary-foreground shadow-glow"
+            onClick={finish}
+          >
             Start my journey
           </Button>
         )}
@@ -210,9 +302,14 @@ function Welcome({ onNext }: { onNext: () => void }) {
         Welcome to <span className="text-gradient">FitMentor AI</span>
       </h1>
       <p className="mt-3 max-w-xs text-base text-muted-foreground">
-        Your pocket fitness coach. Personalized workouts, Indian meal plans, and a smart AI trainer — all for free.
+        Your pocket fitness coach. Personalized workouts, Indian meal plans, and a smart AI trainer
+        — all for free.
       </p>
-      <Button size="lg" className="mt-10 h-14 w-full bg-gradient-hero font-semibold text-primary-foreground shadow-glow" onClick={onNext}>
+      <Button
+        size="lg"
+        className="mt-10 h-14 w-full bg-gradient-hero font-semibold text-primary-foreground shadow-glow"
+        onClick={onNext}
+      >
         Let's go
       </Button>
       <p className="mt-4 text-xs text-muted-foreground">Takes less than 60 seconds</p>
@@ -220,7 +317,15 @@ function Welcome({ onNext }: { onNext: () => void }) {
   );
 }
 
-function Field({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
+function Field({
+  title,
+  sub,
+  children,
+}: {
+  title: string;
+  sub?: string;
+  children: React.ReactNode;
+}) {
   return (
     <div>
       <h2 className="text-2xl font-bold leading-tight">{title}</h2>
@@ -230,14 +335,24 @@ function Field({ title, sub, children }: { title: string; sub?: string; children
   );
 }
 
-function NumInput({ label, value, onChange, suffix }: { label: string; value: unknown; onChange: (v: number) => void; suffix?: string }) {
+function NumInput({
+  label,
+  value,
+  onChange,
+  suffix,
+}: {
+  label: string;
+  value: unknown;
+  onChange: (v: number) => void;
+  suffix?: string;
+}) {
   return (
     <div className="rounded-2xl border border-border/60 bg-card p-3">
       <p className="text-xs text-muted-foreground">{label}</p>
       <div className="mt-1 flex items-end gap-1">
         <input
           inputMode="numeric"
-          value={value as string | number ?? ""}
+          value={(value as string | number) ?? ""}
           onChange={(e) => onChange(Number(e.target.value))}
           className="w-full bg-transparent text-2xl font-bold outline-none"
         />
@@ -247,7 +362,17 @@ function NumInput({ label, value, onChange, suffix }: { label: string; value: un
   );
 }
 
-function Select({ label, value, options, onChange }: { label: string; value: string; options: { v: string; l: string }[]; onChange: (v: string) => void }) {
+function Select({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: { v: string; l: string }[];
+  onChange: (v: string) => void;
+}) {
   return (
     <div className="rounded-2xl border border-border/60 bg-card p-3">
       <p className="text-xs text-muted-foreground">{label}</p>
@@ -257,14 +382,24 @@ function Select({ label, value, options, onChange }: { label: string; value: str
         className="mt-1 w-full bg-transparent text-lg font-semibold outline-none"
       >
         {options.map((o) => (
-          <option key={o.v} value={o.v} className="bg-card text-foreground">{o.l}</option>
+          <option key={o.v} value={o.v} className="bg-card text-foreground">
+            {o.l}
+          </option>
         ))}
       </select>
     </div>
   );
 }
 
-function Choices<T extends string>({ value, onChange, options }: { value: T | undefined; onChange: (v: T) => void; options: { v: T; l: string; e: string }[] }) {
+function Choices<T extends string>({
+  value,
+  onChange,
+  options,
+}: {
+  value: T | undefined;
+  onChange: (v: T) => void;
+  options: { v: T; l: string; e: string }[];
+}) {
   return (
     <div className="space-y-3">
       {options.map((o) => (

@@ -10,6 +10,7 @@ import {
 import { useEffect, useState, type ReactNode } from "react";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "../components/ui/sonner";
+import { loadTheme } from "../lib/theme";
 import appCss from "../styles.css?url";
 
 function registerSW() {
@@ -17,6 +18,13 @@ function registerSW() {
     navigator.serviceWorker.register("/sw.js");
   }
 }
+
+function initTheme() {
+  if (typeof document !== "undefined") {
+    document.documentElement.classList.toggle("dark", loadTheme() === "dark");
+  }
+}
+initTheme();
 
 function NotFoundComponent() {
   return (
@@ -150,7 +158,16 @@ function RootComponent() {
 
 function ClientOnlyToaster() {
   const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const [isDark, setIsDark] = useState(true);
+  useEffect(() => {
+    setMounted(true);
+    setIsDark(document.documentElement.classList.contains("dark"));
+    const observer = new MutationObserver(() => {
+      setIsDark(document.documentElement.classList.contains("dark"));
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
   if (!mounted) return null;
-  return <Toaster theme="dark" position="top-center" />;
+  return <Toaster theme={isDark ? "dark" : "light"} position="top-center" />;
 }

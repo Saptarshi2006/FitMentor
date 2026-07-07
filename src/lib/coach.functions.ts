@@ -25,6 +25,7 @@ const Input = z.object({
       diet: z.string().optional(),
       daysPerWeek: z.number().optional(),
       budgetPerDay: z.number().optional(),
+      healthConditions: z.array(z.string()).optional(),
       calories: z.number().optional(),
       protein: z.number().optional(),
     })
@@ -35,6 +36,9 @@ export const askCoach = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => Input.parse(d))
   .handler(async ({ data }) => {
     const p = data.profile;
+    const healthStr = p?.healthConditions?.length
+      ? `- Health conditions: ${p.healthConditions.join(", ")}`
+      : "";
     const profileBlock = p
       ? `User profile:
 - Name: ${p.name ?? "Friend"}
@@ -43,6 +47,7 @@ export const askCoach = createServerFn({ method: "POST" })
 - Goal: ${p.goal}, Experience: ${p.experience}
 - Trains: ${p.place} (${p.daysPerWeek} days/week)
 - Diet: ${p.diet}, Food budget: ₹${p.budgetPerDay}/day
+${healthStr}
 - Daily targets: ${p.calories} kcal, ${p.protein} g protein`
       : "User has not completed onboarding yet.";
 
@@ -58,10 +63,7 @@ Rules:
 
 ${profileBlock}`;
 
-    const messages: ChatMessage[] = [
-      { role: "system", content: system },
-      ...data.messages,
-    ];
+    const messages: ChatMessage[] = [{ role: "system", content: system }, ...data.messages];
     const reply = await chatCompletion({ messages });
     return { reply };
   });
