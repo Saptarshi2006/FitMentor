@@ -8,10 +8,15 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
-
-import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "../components/ui/sonner";
+import appCss from "../styles.css?url";
+
+function registerSW() {
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/sw.js");
+  }
+}
 
 function NotFoundComponent() {
   return (
@@ -80,10 +85,20 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
       { name: "theme-color", content: "#0a0a1a" },
       { title: "FitMentor AI — Your Pocket Fitness Coach" },
-      { name: "description", content: "AI fitness coach for Indian beginners. Personalized workouts, affordable meal plans, and progress tracking — built for students and gym newbies." },
+      {
+        name: "description",
+        content:
+          "AI fitness coach for Indian beginners. Personalized workouts, affordable meal plans, and progress tracking — built for students and gym newbies.",
+      },
       { name: "author", content: "FitMentor AI" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+      { name: "mobile-web-app-capable", content: "yes" },
       { property: "og:title", content: "FitMentor AI — Your Pocket Fitness Coach" },
-      { property: "og:description", content: "Personalized workouts, Indian meal plans, and an AI coach in your pocket." },
+      {
+        property: "og:description",
+        content: "Personalized workouts, Indian meal plans, and an AI coach in your pocket.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
@@ -93,6 +108,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         rel: "stylesheet",
         href: appCss,
       },
+      { rel: "manifest", href: "/manifest.json" },
+      { rel: "apple-touch-icon", href: "/icons/icon-192.svg" },
     ],
   }),
   shellComponent: RootShell,
@@ -117,6 +134,10 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  useEffect(() => {
+    registerSW();
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
