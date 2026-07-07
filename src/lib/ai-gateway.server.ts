@@ -1,4 +1,6 @@
 // Lovable AI Gateway helper. Server-only — never import from client code.
+import { getLocalResponse } from "./local-coach";
+
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 
 export type ChatMessage = {
@@ -11,7 +13,12 @@ export async function chatCompletion(opts: {
   messages: ChatMessage[];
 }): Promise<string> {
   const apiKey = process.env.LOVABLE_API_KEY;
-  if (!apiKey) throw new Error("Missing LOVABLE_API_KEY");
+
+  if (!apiKey) {
+    const systemMsg = opts.messages.find((m) => m.role === "system");
+    const profile = systemMsg?.content ?? "";
+    return getLocalResponse(opts.messages, profile);
+  }
 
   const res = await fetch(GATEWAY_URL, {
     method: "POST",
@@ -28,7 +35,8 @@ export async function chatCompletion(opts: {
   if (!res.ok) {
     const text = await res.text();
     if (res.status === 429) throw new Error("AI is busy right now — please try again in a moment.");
-    if (res.status === 402) throw new Error("AI credits exhausted. Please add credits to continue.");
+    if (res.status === 402)
+      throw new Error("AI credits exhausted. Please add credits to continue.");
     throw new Error(`AI request failed (${res.status}): ${text.slice(0, 200)}`);
   }
 
