@@ -30,18 +30,8 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Init Capacitor & add Android
-        run: |
-          ./node_modules/.bin/cap init FitMentor ai.fitmentor.app --web-dir dist
-          mkdir -p dist
-          printf '<html><body>FitMentor</body></html>\n' > dist/index.html
-          ./node_modules/.bin/cap add android
-
-      - name: Configure server URL & copy
-        run: |
-          rm -f capacitor.config.ts
-          printf '{"appId":"ai.fitmentor.app","appName":"FitMentor","webDir":"dist","server":{"url":"https://fitmentor-ai-ruddy.vercel.app","cleartext":false,"androidScheme":"https"}}\n' > capacitor.config.json
-          ./node_modules/.bin/cap copy android
+      - name: Setup Capacitor & add Android platform
+        run: node scripts/setup-capacitor.mjs
 
       - name: Build APK
         run: |
