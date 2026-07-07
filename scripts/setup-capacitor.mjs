@@ -1,11 +1,17 @@
-import { mkdirSync, writeFileSync, rmSync, readdirSync } from "fs";
+import { mkdirSync, writeFileSync, rmSync, readdirSync, appendFileSync } from "fs";
 import { execSync } from "child_process";
 
+const log = (msg) => {
+  console.log(msg);
+  appendFileSync("/tmp/capacitor-setup.log", msg + "\n");
+};
+
 try {
-  console.log("CWD:", process.cwd());
-  console.log("Node:", process.version);
-  console.log("Files in root:", readdirSync(".").slice(0, 20));
-  console.log("cap bin exists:", !!readdirSync("node_modules/.bin").find((f) => f === "cap"));
+  log("CWD: " + process.cwd());
+  log("Node: " + process.version);
+  log("Files in root: " + JSON.stringify(readdirSync(".").slice(0, 20)));
+  const bins = readdirSync("node_modules/.bin").join(", ");
+  log("bins: " + bins);
 
   const config = {
     appId: "ai.fitmentor.app",
@@ -22,14 +28,24 @@ try {
   writeFileSync("dist/index.html", "<html><body>FitMentor</body></html>");
   rmSync("capacitor.config.ts", { force: true });
   writeFileSync("capacitor.config.json", JSON.stringify(config));
-  console.log("Config written OK");
+  log("Config files written");
 
-  execSync("./node_modules/.bin/cap add android", { stdio: "inherit" });
-  console.log("cap add android OK");
+  const result1 = execSync("./node_modules/.bin/cap add android", {
+    stdio: "pipe",
+    encoding: "utf8",
+  });
+  log("add android stdout: " + result1);
 
-  execSync("./node_modules/.bin/cap copy android", { stdio: "inherit" });
-  console.log("cap copy android OK");
+  const result2 = execSync("./node_modules/.bin/cap copy android", {
+    stdio: "pipe",
+    encoding: "utf8",
+  });
+  log("copy stdout: " + result2);
+
+  log("SUCCESS");
 } catch (e) {
-  console.error("ERROR:", e.message);
+  log("ERROR: " + e.message);
+  if (e.stdout) log("STDOUT: " + e.stdout);
+  if (e.stderr) log("STDERR: " + e.stderr);
   process.exit(1);
 }

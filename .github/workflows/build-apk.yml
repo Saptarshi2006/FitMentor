@@ -30,8 +30,23 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Verify setup
+        run: |
+          echo "node: $(node --version)"
+          echo "npm: $(npm --version)"
+          echo "pwd: $(pwd)"
+          ls -la node_modules/.bin/cap
+          echo "script exists: $(test -f scripts/setup-capacitor.mjs && echo yes || echo no)"
+
       - name: Setup Capacitor & add Android platform
         run: node scripts/setup-capacitor.mjs
+
+      - name: Upload debug log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-log
+          path: /tmp/capacitor-setup.log
 
       - name: Build APK
         run: |
