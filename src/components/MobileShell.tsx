@@ -33,12 +33,13 @@ export function MobileShell({ children }: { children: ReactNode }) {
       <div className="pointer-events-none absolute inset-x-0 top-0 h-[420px] bg-gradient-mesh" />
       <button
         onClick={toggleTheme}
-        className="fixed right-4 top-4 z-50 flex h-9 w-9 items-center justify-center rounded-full border border-border/60 bg-card/80 text-muted-foreground shadow-card backdrop-blur-xl transition-colors hover:text-foreground"
+        className="fixed right-4 z-50 flex h-9 w-9 items-center justify-center rounded-full border border-border/60 bg-card/80 text-muted-foreground shadow-card backdrop-blur-xl transition-colors hover:text-foreground"
+        style={{ top: "max(1.5rem, calc(env(safe-area-inset-top) + 0.75rem))" }}
         aria-label="Toggle theme"
       >
         {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
       </button>
-      <main className="relative flex-1 pb-28">{children}</main>
+      <main className="relative flex-1 pb-28 pt-safe">{children}</main>
       <nav className="fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-md px-4 pb-4">
         <div className="relative flex items-center justify-around rounded-3xl border border-border/60 bg-card/70 px-1 py-2 shadow-card backdrop-blur-2xl">
           {TABS.map((t) => {

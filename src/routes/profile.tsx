@@ -275,8 +275,8 @@ function PaymentModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-t-3xl bg-card p-6 pb-8 shadow-xl">
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-t-3xl bg-card p-6 pb-20 shadow-xl">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold">
             {step === "success" ? "Payment Successful" : `Pay ₹${plan?.price}`}
