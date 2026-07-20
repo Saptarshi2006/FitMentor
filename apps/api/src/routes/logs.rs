@@ -154,10 +154,6 @@ pub async fn get_streak(
         if row.date == expected {
             streak += 1;
             expected = expected - chrono::Duration::days(1);
-        } else if row.date == expected - chrono::Duration::days(1) {
-            expected = row.date;
-            streak += 1;
-            expected = expected - chrono::Duration::days(1);
         } else {
             break;
         }

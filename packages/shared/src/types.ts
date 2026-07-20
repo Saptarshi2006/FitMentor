@@ -40,6 +40,8 @@ export interface Exercise {
   muscles: string[];
   tips: string;
   alt?: string;
+  emoji?: string;
+  mistakes?: string;
 }
 
 export interface WorkoutDay {

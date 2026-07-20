@@ -22,6 +22,7 @@ pub struct AppState {
     pub pool: PgPool,
     pub cache: CacheService,
     pub jwt_validator: Arc<JwtValidator>,
+    pub polar_webhook_secret: String,
 }
 
 #[tokio::main]
@@ -49,6 +50,7 @@ async fn main() {
         pool,
         cache,
         jwt_validator,
+        polar_webhook_secret: config.polar_webhook_secret,
     };
 
     let cors = CorsLayer::new()

@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct DailyLog {
     pub id: Uuid,
     pub user_id: Uuid,

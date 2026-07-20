@@ -56,7 +56,7 @@ impl LlmClient {
         messages
             .into_iter()
             .map(|m| GeminiContent {
-                role: if m.role == "assistant" { "model" } else { "user" },
+                role: if m.role == "assistant" { "model".to_string() } else { "user".to_string() },
                 parts: vec![GeminiPart { text: m.content }],
             })
             .collect()

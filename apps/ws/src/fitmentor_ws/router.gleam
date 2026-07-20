@@ -2,6 +2,7 @@ import fitmentor_ws/ws_handler
 import gleam/bytes_tree
 import gleam/http/request
 import gleam/http/response
+import gleam/list
 import mist
 
 pub fn start() -> Result(Nil, Nil) {
@@ -17,13 +18,22 @@ pub fn start() -> Result(Nil, Nil) {
           |> response.set_body(mist.Bytes(bytes_tree.from_string(
             "{\"status\":\"ok\",\"version\":\"1.0.0\"}",
           )))
-        ["ws"] ->
+        ["ws"] -> {
+          let token = case request.get_query(req) {
+            Ok(params) ->
+              case list.key_find(params, "token") {
+                Ok(t) -> t
+                Error(_) -> ""
+              }
+            Error(_) -> ""
+          }
           mist.websocket(
             request: req,
-            on_init: ws_handler.on_init,
+            on_init: ws_handler.on_init(_, token),
             on_close: ws_handler.on_close,
             handler: ws_handler.handle_message,
           )
+        }
         _ -> not_found
       }
     }

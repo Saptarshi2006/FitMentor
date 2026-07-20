@@ -45,6 +45,35 @@ services:
       KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
       ALLOW_PLAINTEXT_LISTENER: "yes"
 
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgres://fitmentor:fitmentor@postgres:5432/fitmentor
+      REDIS_URL: redis://redis:6379
+      MONGODB_URL: mongodb://mongodb:27017
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      KAFKA_BROKERS: kafka:9092
+      PORT: "3000"
+      POLAR_WEBHOOK_SECRET: ${POLAR_WEBHOOK_SECRET:-}
+    depends_on:
+      - postgres
+      - redis
+
+  ws:
+    build:
+      context: .
+      dockerfile: apps/ws/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - redis
+
 volumes:
   pgdata:
   mongodata:

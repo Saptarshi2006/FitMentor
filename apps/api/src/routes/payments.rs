@@ -1,9 +1,14 @@
 use axum::extract::State;
+use axum::http::HeaderMap;
 use axum::Json;
+use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 
 use crate::auth::middleware::AuthUser;
 use crate::AppState;
+
+type HmacSha256 = Hmac<Sha256>;
 
 #[derive(Deserialize)]
 pub struct CheckoutRequest {
@@ -53,11 +58,34 @@ pub struct PolarWebhook {
 }
 
 /// POST /v1/webhooks/polar — Handle Polar.sh webhook events.
-/// Ponytail: logs events, TODO: verify signature + process.
+/// Verifies the HMAC-SHA256 signature (polar-signature header) then logs.
 pub async fn webhook_handler(
-    State(_state): State<AppState>,
-    Json(payload): Json<serde_json::Value>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
 ) -> Result<Json<serde_json::Value>, crate::error::AppError> {
+    let secret = &state.polar_webhook_secret;
+    if !secret.is_empty() {
+        let signature = headers
+            .get("polar-signature")
+            .and_then(|v| v.to_str().ok())
+            .ok_or(crate::error::AppError::Unauthorized)?;
+
+        let mut mac =
+            HmacSha256::new_from_slice(secret.as_bytes())
+                .map_err(|e| crate::error::AppError::Internal(e.into()))?;
+        mac.update(&body);
+        let expected = hex::encode(mac.finalize().into_bytes());
+
+        let provided = signature.trim_start_matches("sha256=");
+        if !constant_time_eq(provided, &expected) {
+            return Err(crate::error::AppError::Unauthorized);
+        }
+    }
+
+    let payload: serde_json::Value = serde_json::from_slice(&body)
+        .map_err(|e| crate::error::AppError::BadRequest(e.to_string()))?;
+
     let event_type = payload
         .get("type")
         .and_then(|v| v.as_str())
@@ -65,7 +93,6 @@ pub async fn webhook_handler(
 
     tracing::info!("Polar webhook received: {event_type}");
 
-    // TODO: Verify webhook signature with POLAR_WEBHOOK_SECRET
     // TODO: Process events:
     //   order.paid → upsert subscription, create TigerBeetle transfer
     //   subscription.active → update status
@@ -74,4 +101,18 @@ pub async fn webhook_handler(
     //   refund.created → TigerBeetle transfer
 
     Ok(Json(serde_json::json!({ "received": true })))
+}
+
+/// Constant-time string comparison to avoid timing attacks.
+fn constant_time_eq(a: &str, b: &str) -> bool {
+    let a = a.as_bytes();
+    let b = b.as_bytes();
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
 }
