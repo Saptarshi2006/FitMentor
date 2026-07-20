@@ -1,15 +1,8 @@
 // Lightweight habit & streak tracking in localStorage.
 const KEY = "fitmentor.habits.v1";
 
-export interface DailyLog {
-  date: string; // YYYY-MM-DD
-  water: number; // glasses
-  sleep: number; // hours
-  steps: number;
-  proteinG: number;
-  workoutDone: boolean;
-  weightKg?: number;
-}
+export type { DailyLog } from "@fitmentor/shared";
+import type { DailyLog } from "@fitmentor/shared";
 
 export function todayKey() {
   return new Date().toISOString().slice(0, 10);

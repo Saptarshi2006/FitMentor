@@ -1,27 +1,6 @@
-// User fitness profile — stored client-side for v1.
-// Easy to swap for Lovable Cloud later.
-
-export type Gender = "male" | "female" | "other";
-export type Goal = "fat_loss" | "muscle_gain" | "strength" | "recomp" | "general";
-export type Experience = "beginner" | "intermediate" | "advanced";
-export type Diet = "veg" | "nonveg" | "egg";
-export type Place = "gym" | "home";
-
-export interface Profile {
-  name: string;
-  age: number;
-  gender: Gender;
-  heightCm: number;
-  weightKg: number;
-  goal: Goal;
-  place: Place;
-  experience: Experience;
-  diet: Diet;
-  daysPerWeek: number;
-  budgetPerDay: number; // INR
-  healthConditions: string[]; // e.g. ["diabetes", "heart_disease", "none"]
-  createdAt: string;
-}
+// ponytail: re-exports types from shared for backward compat
+export type { Gender, Goal, Experience, Diet, Place, Profile } from "@fitmentor/shared";
+import type { Profile } from "@fitmentor/shared";
 
 const KEY = "fitmentor.profile.v1";
 
@@ -72,10 +51,4 @@ export function calcTargets(p: Profile) {
   return { calories: Math.round(calories), protein, carbs, fat, tdee };
 }
 
-export const GOAL_LABEL: Record<Goal, string> = {
-  fat_loss: "Fat Loss",
-  muscle_gain: "Muscle Gain",
-  strength: "Strength",
-  recomp: "Body Recomp",
-  general: "Stay Fit",
-};
+export { GOAL_LABEL } from "@fitmentor/shared";

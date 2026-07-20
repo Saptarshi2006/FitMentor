@@ -1,0 +1,9 @@
+{
+  "extends": "react-native/tsconfig",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@fitmentor/shared": ["../../packages/shared/src"]
+    }
+  }
+}

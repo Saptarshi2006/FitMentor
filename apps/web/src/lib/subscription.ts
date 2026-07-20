@@ -1,13 +1,7 @@
 const KEY = "fitmentor.subscription.v1";
 
-export type PlanTier = "free" | "premium" | "pro";
-
-export interface Subscription {
-  tier: PlanTier;
-  startDate: string;
-  expiryDate: string;
-  paymentMethod?: string;
-}
+export type { PlanTier, Subscription } from "@fitmentor/shared";
+import type { PlanTier, Subscription } from "@fitmentor/shared";
 
 export function loadSubscription(): Subscription | null {
   if (typeof window === "undefined") return null;

@@ -1,6 +1,7 @@
 const KEY = "fitmentor.theme.v1";
 
-export type Theme = "light" | "dark";
+export type { Theme } from "@fitmentor/shared";
+import type { Theme } from "@fitmentor/shared";
 
 export function loadTheme(): Theme {
   if (typeof window === "undefined") return "dark";

@@ -1,20 +1,6 @@
-import type { Profile } from "./profile";
+import type { Profile, Exercise, WorkoutDay } from "@fitmentor/shared";
 
-export interface Exercise {
-  name: string;
-  sets: number;
-  reps: string;
-  rest: string;
-  muscles: string[];
-  tips: string;
-  alt?: string;
-}
-
-export interface WorkoutDay {
-  title: string;
-  focus: string;
-  exercises: Exercise[];
-}
+export type { Exercise, WorkoutDay } from "@fitmentor/shared";
 
 // Curated beginner-friendly templates per goal + place.
 const GYM_PPL: WorkoutDay[] = [
@@ -95,21 +81,4 @@ export function generateWorkoutPlan(p: Profile): WorkoutDay[] {
   return plan;
 }
 
-export const EXERCISE_LIBRARY: { name: string; emoji: string; muscles: string[]; tips: string; mistakes: string }[] = [
-  { name: "Bench Press", emoji: "🏋️", muscles: ["Chest", "Triceps", "Shoulders"], tips: "Feet planted, slight arch, bar to mid-chest.", mistakes: "Bouncing the bar off your chest." },
-  { name: "Back Squat", emoji: "🦵", muscles: ["Quads", "Glutes", "Core"], tips: "Brace core, descend with control, drive through heels.", mistakes: "Knees caving inward." },
-  { name: "Deadlift", emoji: "💪", muscles: ["Back", "Hamstrings", "Glutes"], tips: "Bar close to body, neutral spine, push the floor away.", mistakes: "Rounding lower back." },
-  { name: "Pull-up", emoji: "🤸", muscles: ["Lats", "Biceps"], tips: "Full hang, pull chest to bar.", mistakes: "Kipping without control." },
-  { name: "Push-up", emoji: "🙌", muscles: ["Chest", "Triceps", "Core"], tips: "Body in a line, elbows ~45°.", mistakes: "Hips sagging." },
-  { name: "Shoulder Press", emoji: "🪖", muscles: ["Shoulders", "Triceps"], tips: "Press straight up, ribs down.", mistakes: "Overarching lower back." },
-  { name: "Barbell Row", emoji: "🚣", muscles: ["Back", "Biceps"], tips: "Hinge 45°, pull to belly button.", mistakes: "Jerking with momentum." },
-  { name: "Walking Lunges", emoji: "🚶", muscles: ["Quads", "Glutes"], tips: "Long stride, upright torso.", mistakes: "Front knee shooting forward." },
-  { name: "Plank", emoji: "🧘", muscles: ["Core"], tips: "Squeeze glutes and abs, neutral neck.", mistakes: "Holding breath." },
-  { name: "Lat Pulldown", emoji: "⬇️", muscles: ["Lats"], tips: "Pull bar to upper chest, elbows down.", mistakes: "Leaning way back." },
-  { name: "Bicep Curl", emoji: "💪", muscles: ["Biceps"], tips: "Elbows pinned, full ROM.", mistakes: "Swinging the weight." },
-  { name: "Tricep Pushdown", emoji: "📐", muscles: ["Triceps"], tips: "Lock elbows to sides.", mistakes: "Flaring elbows out." },
-  { name: "Leg Press", emoji: "🦿", muscles: ["Quads", "Glutes"], tips: "Don't lock knees at top.", mistakes: "Half reps." },
-  { name: "Lateral Raise", emoji: "🦅", muscles: ["Side Delts"], tips: "Lead with elbows, slight bend.", mistakes: "Using too much weight." },
-  { name: "Romanian Deadlift", emoji: "🏋️", muscles: ["Hamstrings", "Glutes"], tips: "Push hips back, soft knees.", mistakes: "Squatting instead of hinging." },
-  { name: "Face Pull", emoji: "🪢", muscles: ["Rear Delts", "Upper Back"], tips: "Pull to forehead, external rotation.", mistakes: "Using arms only." },
-];
+export { EXERCISE_LIBRARY } from "@fitmentor/shared";
