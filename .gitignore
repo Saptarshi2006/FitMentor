@@ -42,6 +42,7 @@ apps/api/*.db
 
 # Gleam
 apps/ws/build/
+build/
 
 # Redis
 dump.rdb
