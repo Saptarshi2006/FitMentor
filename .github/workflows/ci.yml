@@ -20,6 +20,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npx tsc --noEmit
       - run: npm run build
 
   api:
@@ -34,8 +35,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/api
-      - run: cargo check
-      - run: cargo test
+       - run: cargo check
+       - run: cargo fmt --check
+       - run: cargo clippy -- -D warnings
+       - run: cargo test
 
   ws:
     name: Gleam WS
@@ -49,7 +52,8 @@ jobs:
         with:
           otp-version: '27'
           gleam-version: '1.17.0'
-      - run: gleam build
+       - run: gleam build
+       - run: gleam check
 
   shared:
     name: Shared Package

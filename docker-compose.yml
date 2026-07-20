@@ -74,8 +74,17 @@ services:
     depends_on:
       - redis
 
+  tigerbeetle:
+    image: ghcr.io/tigerbeetle/tigerbeetle
+    ports:
+      - "3001:3001"
+    command: ["start", "--addresses=0.0.0.0:3001", "--format", "0", "/data/0_0.tigerbeetle"]
+    volumes:
+      - tbdata:/data
+
 volumes:
   pgdata:
   mongodata:
   rabbitmqdata:
   kafkadata:
+  tbdata:

@@ -90,7 +90,9 @@ export function CoachChat() {
                 }`}
               >
                 {m.role === "assistant" ? (
-                  <ReactMarkdown className="[&>p]:my-0.5 [&>p]:leading-relaxed">{m.content}</ReactMarkdown>
+                  <div className="[&>p]:my-0.5 [&>p]:leading-relaxed">
+                    <ReactMarkdown>{m.content}</ReactMarkdown>
+                  </div>
                 ) : (
                   m.content
                 )}
