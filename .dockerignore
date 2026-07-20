@@ -1,0 +1,11 @@
+node_modules
+target
+build
+dist
+.vercel
+.git
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
