@@ -12,13 +12,17 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CoachRouteImport } from './routes/coach'
 import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as NutritionRouteImport } from './routes/nutrition'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as ProgressRouteImport } from './routes/progress'
+import { Route as SigninRouteImport } from './routes/signin'
+import { Route as SignupRouteImport } from './routes/signup'
 import { Route as ToolsRouteImport } from './routes/tools'
 import { Route as WorkoutsRouteImport } from './routes/workouts'
 import { Route as ExerciseNameRouteImport } from './routes/exercise.$name'
+import { Route as AuthDiscordCallbackRouteImport } from './routes/auth.discord.callback'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -33,6 +37,11 @@ const CoachRoute = CoachRouteImport.update({
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const NutritionRoute = NutritionRouteImport.update({
@@ -55,6 +64,16 @@ const ProgressRoute = ProgressRouteImport.update({
   path: '/progress',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SigninRoute = SigninRouteImport.update({
+  id: '/signin',
+  path: '/signin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ToolsRoute = ToolsRouteImport.update({
   id: '/tools',
   path: '/tools',
@@ -70,43 +89,60 @@ const ExerciseNameRoute = ExerciseNameRouteImport.update({
   path: '/exercise/$name',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthDiscordCallbackRoute = AuthDiscordCallbackRouteImport.update({
+  id: '/auth/discord/callback',
+  path: '/auth/discord/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/coach': typeof CoachRoute
   '/dashboard': typeof DashboardRoute
+  '/login': typeof LoginRoute
   '/nutrition': typeof NutritionRoute
   '/onboarding': typeof OnboardingRoute
   '/profile': typeof ProfileRoute
   '/progress': typeof ProgressRoute
+  '/signin': typeof SigninRoute
+  '/signup': typeof SignupRoute
   '/tools': typeof ToolsRoute
   '/workouts': typeof WorkoutsRoute
   '/exercise/$name': typeof ExerciseNameRoute
+  '/auth/discord/callback': typeof AuthDiscordCallbackRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/coach': typeof CoachRoute
   '/dashboard': typeof DashboardRoute
+  '/login': typeof LoginRoute
   '/nutrition': typeof NutritionRoute
   '/onboarding': typeof OnboardingRoute
   '/profile': typeof ProfileRoute
   '/progress': typeof ProgressRoute
+  '/signin': typeof SigninRoute
+  '/signup': typeof SignupRoute
   '/tools': typeof ToolsRoute
   '/workouts': typeof WorkoutsRoute
   '/exercise/$name': typeof ExerciseNameRoute
+  '/auth/discord/callback': typeof AuthDiscordCallbackRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/coach': typeof CoachRoute
   '/dashboard': typeof DashboardRoute
+  '/login': typeof LoginRoute
   '/nutrition': typeof NutritionRoute
   '/onboarding': typeof OnboardingRoute
   '/profile': typeof ProfileRoute
   '/progress': typeof ProgressRoute
+  '/signin': typeof SigninRoute
+  '/signup': typeof SignupRoute
   '/tools': typeof ToolsRoute
   '/workouts': typeof WorkoutsRoute
   '/exercise/$name': typeof ExerciseNameRoute
+  '/auth/discord/callback': typeof AuthDiscordCallbackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -114,50 +150,66 @@ export interface FileRouteTypes {
     | '/'
     | '/coach'
     | '/dashboard'
+    | '/login'
     | '/nutrition'
     | '/onboarding'
     | '/profile'
     | '/progress'
+    | '/signin'
+    | '/signup'
     | '/tools'
     | '/workouts'
     | '/exercise/$name'
+    | '/auth/discord/callback'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/coach'
     | '/dashboard'
+    | '/login'
     | '/nutrition'
     | '/onboarding'
     | '/profile'
     | '/progress'
+    | '/signin'
+    | '/signup'
     | '/tools'
     | '/workouts'
     | '/exercise/$name'
+    | '/auth/discord/callback'
   id:
     | '__root__'
     | '/'
     | '/coach'
     | '/dashboard'
+    | '/login'
     | '/nutrition'
     | '/onboarding'
     | '/profile'
     | '/progress'
+    | '/signin'
+    | '/signup'
     | '/tools'
     | '/workouts'
     | '/exercise/$name'
+    | '/auth/discord/callback'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CoachRoute: typeof CoachRoute
   DashboardRoute: typeof DashboardRoute
+  LoginRoute: typeof LoginRoute
   NutritionRoute: typeof NutritionRoute
   OnboardingRoute: typeof OnboardingRoute
   ProfileRoute: typeof ProfileRoute
   ProgressRoute: typeof ProgressRoute
+  SigninRoute: typeof SigninRoute
+  SignupRoute: typeof SignupRoute
   ToolsRoute: typeof ToolsRoute
   WorkoutsRoute: typeof WorkoutsRoute
   ExerciseNameRoute: typeof ExerciseNameRoute
+  AuthDiscordCallbackRoute: typeof AuthDiscordCallbackRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -181,6 +233,13 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/nutrition': {
@@ -211,6 +270,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProgressRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/signin': {
+      id: '/signin'
+      path: '/signin'
+      fullPath: '/signin'
+      preLoaderRoute: typeof SigninRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/tools': {
       id: '/tools'
       path: '/tools'
@@ -232,6 +305,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ExerciseNameRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/auth/discord/callback': {
+      id: '/auth/discord/callback'
+      path: '/auth/discord/callback'
+      fullPath: '/auth/discord/callback'
+      preLoaderRoute: typeof AuthDiscordCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -239,13 +319,17 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CoachRoute: CoachRoute,
   DashboardRoute: DashboardRoute,
+  LoginRoute: LoginRoute,
   NutritionRoute: NutritionRoute,
   OnboardingRoute: OnboardingRoute,
   ProfileRoute: ProfileRoute,
   ProgressRoute: ProgressRoute,
+  SigninRoute: SigninRoute,
+  SignupRoute: SignupRoute,
   ToolsRoute: ToolsRoute,
   WorkoutsRoute: WorkoutsRoute,
   ExerciseNameRoute: ExerciseNameRoute,
+  AuthDiscordCallbackRoute: AuthDiscordCallbackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
