@@ -22,6 +22,10 @@ function DashboardPage() {
 
 useEffect(() => {
   const p = loadProfile();
+  if (!p) {
+    navigate({ to: "/onboarding" });
+    return;
+  }
   setProfile(p);
   setLog(ensureToday());
   setStreak(computeStreak());

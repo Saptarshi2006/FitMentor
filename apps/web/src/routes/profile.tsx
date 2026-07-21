@@ -201,7 +201,7 @@ function ProfilePage() {
           className="text-muted-foreground"
           onClick={() => {
             clearProfile();
-            nav({ to: "/onboarding" });
+            nav({ to: "/" });
           }}
         >
           <LogOut className="h-4 w-4" />
