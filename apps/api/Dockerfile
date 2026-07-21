@@ -13,7 +13,7 @@ RUN touch src/main.rs && cargo build --release
 
 FROM debian:bookworm-slim
 
-RUN apt-get update && apt-get install -y libssl ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y libssl3 ca-certificates && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/fitmentor-api /usr/local/bin/
 
