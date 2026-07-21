@@ -1,0 +1,11 @@
+name = "fitmentor"
+compatibility_date = "2026-07-20"
+compatibility_flags = ["nodejs_compat"]
+
+pages_build_output_dir = "dist"
+
+# === Set these in Cloudflare Pages dashboard → Settings → Environment variables ===
+# DISCORD_CLIENT_ID=
+# DISCORD_CLIENT_SECRET=
+# SESSION_SECRET=
+# APP_URL=

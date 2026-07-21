@@ -27,12 +27,20 @@ function Landing() {
           <img src={logoImg} alt="FitMentor AI" className="h-9 w-9 object-contain" />
           <span className="text-lg font-bold tracking-tight">FitMentor AI</span>
         </div>
-        <Link
-          to="/onboarding"
-          className="rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 active:scale-95"
-        >
-          Get Started
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            to="/login"
+            className="text-sm font-medium text-muted-foreground transition hover:text-foreground"
+          >
+            Sign In
+          </Link>
+          <Link
+            to="/onboarding"
+            className="rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 active:scale-95"
+          >
+            Get Started
+          </Link>
+        </div>
       </nav>
 
       {/* Hero */}

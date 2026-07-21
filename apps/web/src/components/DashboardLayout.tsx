@@ -1,6 +1,7 @@
 import { type ReactNode } from "react";
 import { MobileShell } from "@/components/MobileShell";
 import type { Profile } from "@/utils/profile";
+import { useAuth } from "@/utils/auth";
 
 export function DashboardLayout({
   children,
@@ -9,6 +10,7 @@ export function DashboardLayout({
   children: ReactNode;
   profile?: Profile | null;
 }) {
+  const auth = useAuth();
   return (
     <MobileShell>
       {/* Top bar with greeting — ponytail: reuses MobileShell for nav, adds greeting */}
@@ -17,6 +19,9 @@ export function DashboardLayout({
           <span suppressHydrationWarning>
             {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" })}
           </span>
+          {auth?.email && (
+            <span className="ml-2 lowercase normal-case tracking-normal text-primary">· {auth.email}</span>
+          )}
         </p>
         {profile && (
           <h1 className="mt-1 text-3xl font-bold tracking-tight">
