@@ -27,20 +27,12 @@ function Landing() {
           <img src={logoImg} alt="FitMentor AI" className="h-9 w-9 object-contain" />
           <span className="text-lg font-bold tracking-tight">FitMentor AI</span>
         </div>
-        <div className="flex items-center gap-3">
-          <Link
-            to="/login"
-            className="text-sm font-medium text-muted-foreground transition hover:text-foreground"
-          >
-            Sign In
-          </Link>
-          <Link
-            to="/onboarding"
-            className="rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 active:scale-95"
-          >
-            Get Started
-          </Link>
-        </div>
+        <Link
+          to="/signin"
+          className="rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 active:scale-95"
+        >
+          Get Started
+        </Link>
       </nav>
 
       {/* Hero */}
@@ -61,13 +53,13 @@ function Landing() {
           </p>
           <div className="mt-8 flex flex-col items-center gap-3">
             <Link
-              to="/onboarding"
+              to="/signin"
               className="inline-flex items-center gap-2 rounded-full bg-gradient-hero px-7 py-3.5 text-base font-semibold text-primary-foreground shadow-glow transition hover:opacity-90 active:scale-95"
             >
               Start for free <ArrowRight className="h-4 w-4" />
             </Link>
             <p className="text-xs text-muted-foreground">
-              No sign-up required • Works offline
+              Sign in with Discord • Free to start
             </p>
           </div>
         </div>
@@ -124,13 +116,13 @@ function Landing() {
           <div className="relative">
             <h2 className="text-2xl font-bold">Ready to start?</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Your first plan is free. No account needed.
+              Sign in with Discord and get your custom plan in 30 seconds.
             </p>
             <Link
-              to="/onboarding"
-              className="mt-6 inline-flex items-center gap-2 rounded-full bg-gradient-hero px-7 py-3.5 text-base font-semibold text-primary-foreground shadow-glow transition hover:opacity-90 active:scale-95"
+              to="/signin"
+              className="inline-flex items-center gap-2 rounded-full bg-gradient-hero px-7 py-3.5 text-base font-semibold text-primary-foreground shadow-glow transition hover:opacity-90 active:scale-95"
             >
-              Get started <ChevronRight className="h-4 w-4" />
+              Start for free <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
         </div>
@@ -140,12 +132,8 @@ function Landing() {
       <footer className="border-t border-white/5 px-5 py-8 text-center text-xs text-muted-foreground">
         <p>FitMentor AI — Built in India 🇮🇳</p>
         <div className="mt-3 flex justify-center gap-4">
-          <Link to="/onboarding" className="hover:text-foreground transition">
+          <Link to="/signup" className="hover:text-foreground transition">
             Get Started
-          </Link>
-          <span className="text-border">•</span>
-          <Link to="/onboarding" className="hover:text-foreground transition">
-            About
           </Link>
         </div>
       </footer>

@@ -20,27 +20,23 @@ function DashboardPage() {
   const [log, setLog] = useState<DailyLog | null>(null);
   const [streak, setStreak] = useState(0);
 
-  useEffect(() => {
-    const p = loadProfile();
-    if (!p) {
-      navigate({ to: "/onboarding" });
-      return;
-    }
-    setProfile(p);
+useEffect(() => {
+  const p = loadProfile();
+  setProfile(p);
+  setLog(ensureToday());
+  setStreak(computeStreak());
+  const onChange = () => {
+    setProfile(loadProfile());
     setLog(ensureToday());
     setStreak(computeStreak());
-    const onChange = () => {
-      setProfile(loadProfile());
-      setLog(ensureToday());
-      setStreak(computeStreak());
-    };
-    window.addEventListener("fitmentor:logs", onChange);
-    window.addEventListener("fitmentor:profile", onChange);
-    return () => {
-      window.removeEventListener("fitmentor:logs", onChange);
-      window.removeEventListener("fitmentor:profile", onChange);
-    };
-  }, [navigate]);
+  };
+  window.addEventListener("fitmentor:logs", onChange);
+  window.addEventListener("fitmentor:profile", onChange);
+  return () => {
+    window.removeEventListener("fitmentor:logs", onChange);
+    window.removeEventListener("fitmentor:profile", onChange);
+  };
+}, [navigate]);
 
   if (!profile || !log) {
     return (
