@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Dumbbell } from "lucide-react";
 import logoImg from "@/assets/logo-v2.png";
-import { getDiscordAuthUrl, getSessionUser } from "@/utils/oauth";
+import { getDiscordAuthUrl, getSessionUser, renewSession } from "@/utils/oauth";
 
 export const Route = createFileRoute("/signin")({
   head: () => ({ meta: [{ title: "Sign In — FitMentor" }] }),
@@ -12,10 +12,22 @@ export const Route = createFileRoute("/signin")({
 function SignInPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState("");
+  const [checking, setChecking] = useState(true);
 
   useEffect(() => {
     const user = getSessionUser();
-    if (user) navigate({ to: "/dashboard" });
+    if (user) {
+      navigate({ to: "/dashboard" });
+      return;
+    }
+    if (document.cookie.includes("fitmentor_remember")) {
+      renewSession().then((r) => {
+        if (r.ok) navigate({ to: "/dashboard" });
+        else setChecking(false);
+      });
+    } else {
+      setChecking(false);
+    }
   }, [navigate]);
 
   const signInDiscord = async () => {
@@ -23,6 +35,17 @@ function SignInPage() {
     const url = await getDiscordAuthUrl({ data: { mode: "signin" } });
     window.location.href = url;
   };
+
+  if (checking) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="flex items-center gap-3 text-muted-foreground">
+          <span className="h-5 w-5 animate-spin rounded-full border-2 border-foreground border-t-transparent" />
+          Signing you in…
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative flex min-h-screen flex-col bg-background">

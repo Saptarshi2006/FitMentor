@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { setResponseHeader } from "@tanstack/react-start/server";
+import { getCookie, setResponseHeader } from "@tanstack/react-start/server";
 
 interface DiscordUser {
   id: string;
@@ -16,7 +16,9 @@ export interface SessionUser {
 }
 
 const SESSION_COOKIE = "fitmentor_session";
+const REMEMBER_COOKIE = "fitmentor_remember";
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7;
+const REMEMBER_MAX_AGE = 60 * 60 * 24 * 30;
 
 function signSession(data: SessionUser): string {
   const secret = process.env.SESSION_SECRET || "dev-secret-change-me";
@@ -63,9 +65,21 @@ export const getDiscordAuthUrl = createServerFn({ method: "GET" })
     url.searchParams.set("response_type", "code");
     url.searchParams.set("scope", "identify email");
     if (mode) url.searchParams.set("state", mode);
-    if (mode === "signin") url.searchParams.set("prompt", "none");
     return url.toString();
   });
+
+export const renewSession = createServerFn({ method: "POST" }).handler(async () => {
+  const raw = getCookie(REMEMBER_COOKIE);
+  if (!raw) return { ok: false } as const;
+  const session = verifySession(raw);
+  if (!session) return { ok: false } as const;
+  const token = signSession(session);
+  setResponseHeader(
+    "Set-Cookie",
+    `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MAX_AGE}`,
+  );
+  return { ok: true, user: session } as const;
+});
 
 const discordCodec = (d: { code: string; state?: string }) => d;
 
@@ -128,7 +142,8 @@ export const exchangeDiscordCode = createServerFn({ method: "POST" })
 
     setResponseHeader(
       "Set-Cookie",
-      `${SESSION_COOKIE}=${session}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MAX_AGE}`,
+      `${SESSION_COOKIE}=${session}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MAX_AGE}; ` +
+      `${REMEMBER_COOKIE}=${session}; Path=/; SameSite=Lax; Max-Age=${REMEMBER_MAX_AGE}`,
     );
 
     // Sync user to backend DB
@@ -150,5 +165,11 @@ export const exchangeDiscordCode = createServerFn({ method: "POST" })
 
 export function logout() {
   document.cookie = `${SESSION_COOKIE}=; Path=/; Max-Age=0`;
+  window.location.href = "/";
+}
+
+export function forgetDevice() {
+  document.cookie = `${SESSION_COOKIE}=; Path=/; Max-Age=0`;
+  document.cookie = `${REMEMBER_COOKIE}=; Path=/; Max-Age=0`;
   window.location.href = "/";
 }

@@ -1,7 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { MobileShell } from "@/components/MobileShell";
-import { loadProfile, calcTargets, GOAL_LABEL, clearProfile, type Profile } from "@/utils/profile";
+import { loadProfile, calcTargets, GOAL_LABEL, type Profile } from "@/utils/profile";
+import { logout, forgetDevice } from "@/utils/oauth";
 import {
   loadSubscription,
   saveSubscription,
@@ -199,10 +200,7 @@ function ProfilePage() {
         <Button
           variant="ghost"
           className="text-muted-foreground"
-          onClick={() => {
-            clearProfile();
-            nav({ to: "/" });
-          }}
+          onClick={logout}
         >
           <LogOut className="h-4 w-4" />
         </Button>
