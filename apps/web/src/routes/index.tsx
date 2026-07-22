@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Dumbbell, Brain, Apple, TrendingUp, ChevronRight, ArrowRight } from "lucide-react";
 import logoImg from "@/assets/logo-v2.png";
+import { useEffect, useState } from "react";
+import { checkSession } from "@/utils/oauth";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -17,6 +19,16 @@ export const Route = createFileRoute("/")({
 });
 
 function Landing() {
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    checkSession().then((s) => {
+      setLoggedIn(s.ok);
+      setChecking(false);
+    });
+  }, []);
+
   return (
     <div className="relative min-h-screen bg-background">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-[500px] bg-gradient-mesh" />
@@ -27,12 +39,14 @@ function Landing() {
           <img src={logoImg} alt="FitMentor AI" className="h-9 w-9 object-contain" />
           <span className="text-lg font-bold tracking-tight">FitMentor AI</span>
         </div>
-        <Link
-          to="/signin"
-          className="rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 active:scale-95"
-        >
-          Get Started
-        </Link>
+        {checking ? null : (
+          <Link
+            to={loggedIn ? "/dashboard" : "/signin"}
+            className="rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 active:scale-95"
+          >
+            {loggedIn ? "Dashboard" : "Get Started"}
+          </Link>
+        )}
       </nav>
 
       {/* Hero */}
@@ -52,12 +66,14 @@ function Landing() {
             knows your name — all in your pocket.
           </p>
           <div className="mt-8 flex flex-col items-center gap-3">
-            <Link
-              to="/signin"
-              className="inline-flex items-center gap-2 rounded-full bg-gradient-hero px-7 py-3.5 text-base font-semibold text-primary-foreground shadow-glow transition hover:opacity-90 active:scale-95"
-            >
-              Start for free <ArrowRight className="h-4 w-4" />
-            </Link>
+            {checking ? null : (
+              <Link
+                to={loggedIn ? "/dashboard" : "/signin"}
+                className="inline-flex items-center gap-2 rounded-full bg-gradient-hero px-7 py-3.5 text-base font-semibold text-primary-foreground shadow-glow transition hover:opacity-90 active:scale-95"
+              >
+                {loggedIn ? "Go to Dashboard" : "Start for free"} <ArrowRight className="h-4 w-4" />
+              </Link>
+            )}
             <p className="text-xs text-muted-foreground">
               Sign in with Discord • Free to start
             </p>
@@ -118,12 +134,14 @@ function Landing() {
             <p className="mt-2 text-sm text-muted-foreground">
               Sign in with Discord and get your custom plan in 30 seconds.
             </p>
-            <Link
-              to="/signin"
-              className="inline-flex items-center gap-2 rounded-full bg-gradient-hero px-7 py-3.5 text-base font-semibold text-primary-foreground shadow-glow transition hover:opacity-90 active:scale-95"
-            >
-              Start for free <ArrowRight className="h-4 w-4" />
-            </Link>
+            {checking ? null : (
+              <Link
+                to={loggedIn ? "/dashboard" : "/signin"}
+                className="inline-flex items-center gap-2 rounded-full bg-gradient-hero px-7 py-3.5 text-base font-semibold text-primary-foreground shadow-glow transition hover:opacity-90 active:scale-95"
+              >
+                {loggedIn ? "Go to Dashboard" : "Start for free"} <ArrowRight className="h-4 w-4" />
+              </Link>
+            )}
           </div>
         </div>
       </section>
