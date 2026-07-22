@@ -71,14 +71,37 @@ export const getDiscordAuthUrl = createServerFn({ method: "GET" })
 export const renewSession = createServerFn({ method: "POST" }).handler(async () => {
   const raw = getCookie(REMEMBER_COOKIE);
   if (!raw) return { ok: false } as const;
-  const session = verifySession(raw);
-  if (!session) return { ok: false } as const;
-  const token = signSession(session);
+  let sub = "", email = "";
+  try {
+    const data = JSON.parse(atob(raw));
+    sub = data.sub || "";
+    email = data.email || sub;
+  } catch {
+    return { ok: false } as const;
+  }
+  if (!sub) return { ok: false } as const;
+  const apiUrl = process.env.API_URL || "https://16-112-225-113.sslip.io";
+  const apiKey = process.env.API_SHARED_SECRET;
+  if (!apiKey) return { ok: false } as const;
+  const res = await fetch(`${apiUrl}/v1/user/me`, {
+    headers: { "X-Api-Key": apiKey, "X-User-Id": sub, "X-User-Email": email },
+  });
+  if (!res.ok) return { ok: false } as const;
+  const json: unknown = await res.json();
+  const resData = (json as Record<string, unknown>).data as Record<string, unknown> | undefined;
+  const user = resData?.user as Record<string, unknown> | undefined;
+  if (!user?.id) return { ok: false } as const;
+  const session = signSession({
+    sub,
+    email,
+    name: (user.name as string) || "",
+    provider: "discord",
+  });
   setResponseHeader(
     "Set-Cookie",
-    `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MAX_AGE}`,
+    `${SESSION_COOKIE}=${session}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MAX_AGE}`,
   );
-  return { ok: true, user: session } as const;
+  return { ok: true } as const;
 });
 
 const discordCodec = (d: { code: string; state?: string }) => d;
@@ -142,8 +165,7 @@ export const exchangeDiscordCode = createServerFn({ method: "POST" })
 
     setResponseHeader(
       "Set-Cookie",
-      `${SESSION_COOKIE}=${session}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MAX_AGE}; ` +
-      `${REMEMBER_COOKIE}=${session}; Path=/; SameSite=Lax; Max-Age=${REMEMBER_MAX_AGE}`,
+      `${SESSION_COOKIE}=${session}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MAX_AGE}`,
     );
 
     // Sync user to backend DB

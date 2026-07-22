@@ -29,6 +29,8 @@ function DiscordCallback() {
     const state = params.get("state") || "";
     exchangeDiscordCode({ data: { code, state } }).then((result) => {
       if (result.ok) {
+        const payload = btoa(JSON.stringify({ sub: result.user.sub, email: result.user.email }));
+        document.cookie = `fitmentor_remember=${payload}; Path=/; SameSite=Lax; Max-Age=${2592000}`;
         window.location.href = "/dashboard";
       } else if (result.error === "user_exists") {
         setError("An account already exists with this Discord account");
