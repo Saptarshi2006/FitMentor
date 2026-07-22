@@ -5,7 +5,7 @@ import { cn } from "@/utils/cn";
 import { saveTheme, loadTheme } from "@/utils/theme";
 
 const TABS = [
-  { to: "/", label: "Home", icon: Home },
+  { to: "/dashboard", label: "Home", icon: Home },
   { to: "/workouts", label: "Train", icon: Dumbbell },
   { to: "/tools", label: "Tools", icon: Wrench },
   { to: "/coach", label: "Coach", icon: Sparkles, accent: true },
@@ -44,7 +44,7 @@ export function MobileShell({ children }: { children: ReactNode }) {
         <div className="relative flex items-center justify-around rounded-3xl border border-border/60 bg-card/70 px-1 py-2 shadow-card backdrop-blur-2xl">
           {TABS.map((t) => {
             const Icon = t.icon;
-            const active = t.to === "/" ? pathname === "/" : pathname.startsWith(t.to);
+            const active = t.to === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(t.to);
             const accent = "accent" in t && t.accent;
             return (
               <Link

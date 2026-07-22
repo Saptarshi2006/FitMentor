@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Dumbbell, Brain, Apple, TrendingUp } from "lucide-react";
+import { Dumbbell } from "lucide-react";
 import logoImg from "@/assets/logo-v2.png";
 import { getDiscordAuthUrl, getSessionUser } from "@/utils/oauth";
 
@@ -62,34 +62,15 @@ function SignUpPage() {
               )}
               Sign up with Discord
             </button>
-
-            <button
-              disabled
-              className="flex w-full items-center justify-center gap-3 rounded-xl border border-white/10 bg-card/70 px-6 py-3.5 text-sm font-semibold opacity-40"
-            >
-              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
-              </svg>
-              Sign up with Apple
-              <span className="text-[10px] text-muted-foreground">(coming soon)</span>
-            </button>
           </div>
 
-
-
-          <div className="mt-8 grid grid-cols-3 gap-3">
-            <div className="text-center">
-              <Brain className="mx-auto h-5 w-5 text-primary" />
-              <p className="mt-1 text-[10px] text-muted-foreground">AI Coach</p>
-            </div>
-            <div className="text-center">
-              <Apple className="mx-auto h-5 w-5 text-primary" />
-              <p className="mt-1 text-[10px] text-muted-foreground">Meal Plans</p>
-            </div>
-            <div className="text-center">
-              <TrendingUp className="mx-auto h-5 w-5 text-primary" />
-              <p className="mt-1 text-[10px] text-muted-foreground">Progress</p>
-            </div>
+          <div className="mt-6 text-center">
+            <p className="text-xs text-muted-foreground">
+              Already have an account?{" "}
+              <Link to="/signin" className="underline font-medium hover:text-foreground">
+                Sign in
+              </Link>
+            </p>
           </div>
 
           <div className="mt-6 text-center">
