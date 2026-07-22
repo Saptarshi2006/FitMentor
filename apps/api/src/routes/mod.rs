@@ -14,6 +14,7 @@ pub fn routes(state: AppState) -> Router {
         .route("/v1/health", axum::routing::get(health::health))
         // User & Profile
         .route("/v1/user/me", axum::routing::get(user::get_me))
+        .route("/v1/user/exists", axum::routing::get(user::check_user_exists))
         .route("/v1/user/profile", axum::routing::put(user::update_profile))
         .route(
             "/v1/user/profile/protein-target",

@@ -17,9 +17,12 @@ function DiscordCallback() {
       setError("No authorization code received from Discord");
       return;
     }
-    exchangeDiscordCode({ data: { code } }).then((result) => {
+    const state = params.get("state") || "";
+    exchangeDiscordCode({ data: { code, state } }).then((result) => {
       if (result.ok) {
         window.location.href = "/dashboard";
+      } else if (result.error === "user_exists") {
+        setError("An account already exists with this Discord account");
       } else {
         setError(result.error || "Authentication failed");
       }
@@ -32,6 +35,13 @@ function DiscordCallback() {
         <div className="text-center max-w-sm">
           <h1 className="text-xl font-bold text-foreground">Sign in failed</h1>
           <p className="mt-2 text-sm text-muted-foreground">{error}</p>
+          <p className="text-sm text-muted-foreground">
+            Please{" "}
+            <a href="/signin" className="underline font-medium hover:text-foreground">
+              sign in
+            </a>{" "}
+            instead.
+          </p>
           <a
             href="/signin"
             className="mt-4 inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"

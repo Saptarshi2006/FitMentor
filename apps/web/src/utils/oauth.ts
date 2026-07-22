@@ -51,24 +51,28 @@ export function getSessionUser(): SessionUser | null {
   return verifySession(decodeURIComponent(m[1]));
 }
 
-export const getDiscordAuthUrl = createServerFn({ method: "GET" }).handler(async () => {
-  const clientId = process.env.DISCORD_CLIENT_ID || "";
-  const redirectUri = `${process.env.APP_URL || "http://localhost:3000"}/auth/discord/callback`;
-  const url = new URL("https://discord.com/api/oauth2/authorize");
-  url.searchParams.set("client_id", clientId);
-  url.searchParams.set("redirect_uri", redirectUri);
-  url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", "identify email");
-  url.searchParams.set("prompt", "consent");
-  return url.toString();
-});
+export const getDiscordAuthUrl = createServerFn({ method: "GET" })
+  .validator((d?: { mode?: string }) => d ?? {})
+  .handler(async (ctx) => {
+    const mode = ctx.data.mode;
+    const clientId = process.env.DISCORD_CLIENT_ID || "";
+    const redirectUri = `${process.env.APP_URL || "http://localhost:3000"}/auth/discord/callback`;
+    const url = new URL("https://discord.com/api/oauth2/authorize");
+    url.searchParams.set("client_id", clientId);
+    url.searchParams.set("redirect_uri", redirectUri);
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("scope", "identify email");
+    url.searchParams.set("prompt", "consent");
+    if (mode) url.searchParams.set("state", mode);
+    return url.toString();
+  });
 
-const discordCodec = (d: { code: string }) => d;
+const discordCodec = (d: { code: string; state?: string }) => d;
 
 export const exchangeDiscordCode = createServerFn({ method: "POST" })
   .validator(discordCodec)
   .handler(async (ctx) => {
-    const { code } = ctx.data;
+    const { code, state } = ctx.data;
 
     const clientId = process.env.DISCORD_CLIENT_ID || "";
     const clientSecret = process.env.DISCORD_CLIENT_SECRET || "";
@@ -97,6 +101,23 @@ export const exchangeDiscordCode = createServerFn({ method: "POST" })
 
     const sub = `discord:${discordUser.id}`;
     const email = discordUser.email || `${discordUser.username}@discord`;
+    const apiUrl = process.env.API_URL || "https://16-112-225-113.sslip.io";
+    const apiKey = process.env.API_SHARED_SECRET || "";
+
+    // If coming from signup, check if user already exists
+    if (state === "signup" && apiKey) {
+      const existRes = await fetch(`${apiUrl}/v1/user/exists`, {
+        headers: {
+          "X-Api-Key": apiKey,
+          "X-User-Id": sub,
+          "X-User-Email": email,
+        },
+      });
+      const existData = await existRes.json();
+      if (existData.exists) {
+        return { ok: false, error: "user_exists" } as const;
+      }
+    }
 
     const session = signSession({
       sub,
@@ -111,8 +132,6 @@ export const exchangeDiscordCode = createServerFn({ method: "POST" })
     );
 
     // Sync user to backend DB
-    const apiUrl = process.env.API_URL || "https://16-112-225-113.sslip.io";
-    const apiKey = process.env.API_SHARED_SECRET || "";
     if (apiKey) {
       fetch(`${apiUrl}/v1/user/me`, {
         headers: {

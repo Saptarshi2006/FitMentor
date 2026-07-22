@@ -20,7 +20,7 @@ function SignUpPage() {
 
   const signUpDiscord = async () => {
     setLoading("discord");
-    const url = await getDiscordAuthUrl();
+    const url = await getDiscordAuthUrl({ data: { mode: "signup" } });
     window.location.href = url;
   };
 

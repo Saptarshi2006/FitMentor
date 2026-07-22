@@ -105,6 +105,14 @@ pub async fn get_me(
     Ok((StatusCode::OK, AxumJson(response)).into_response())
 }
 
+pub async fn check_user_exists(
+    auth: AuthUser,
+    State(state): State<AppState>,
+) -> Result<Response, AppError> {
+    let exists = get_user_by_cf_sub(&state.pool, &auth.user_id).await.is_ok();
+    Ok((StatusCode::OK, AxumJson(serde_json::json!({ "exists": exists }))).into_response())
+}
+
 pub async fn update_profile(
     auth: AuthUser,
     State(state): State<AppState>,
