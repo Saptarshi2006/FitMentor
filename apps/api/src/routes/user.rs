@@ -8,6 +8,31 @@ use crate::models::profile::{Profile, ProteinTarget, UpdateProfile};
 use crate::models::user::User;
 use crate::AppState;
 
+fn profile_to_value(p: Profile) -> serde_json::Value {
+    let hc = p.health_conditions
+        .as_deref()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok());
+    serde_json::json!({
+        "id": p.id,
+        "userId": p.user_id,
+        "name": p.name,
+        "age": p.age,
+        "gender": p.gender,
+        "heightCm": p.height_cm,
+        "weightKg": p.weight_kg,
+        "goal": p.goal,
+        "place": p.place,
+        "experience": p.experience,
+        "diet": p.diet,
+        "daysPerWeek": p.days_per_week,
+        "budgetPerDay": p.budget_per_day,
+        "healthConditions": hc,
+        "customProteinG": p.custom_protein_g,
+        "createdAt": p.created_at,
+        "updatedAt": p.updated_at,
+    })
+}
+
 async fn get_user_by_cf_sub(pool: &sqlx::PgPool, cf_sub: &str) -> Result<User, AppError> {
     sqlx::query_as::<_, User>(
         r#"SELECT id, cf_access_sub, email, name, created_at, updated_at
@@ -71,7 +96,7 @@ pub async fn get_me(
                 "name": user.name,
                 "created_at": user.created_at
             },
-            "profile": profile
+            "profile": profile.map(profile_to_value)
         }
     });
 
@@ -86,6 +111,10 @@ pub async fn update_profile(
     AxumJson(input): AxumJson<UpdateProfile>,
 ) -> Result<Response, AppError> {
     let user = get_user_by_cf_sub(&state.pool, &auth.user_id).await?;
+
+    let hc_str = input.health_conditions
+        .as_ref()
+        .and_then(|v| serde_json::to_string(v).ok());
 
     let profile = sqlx::query_as::<_, Profile>(
         r#"UPDATE profiles SET
@@ -119,14 +148,14 @@ pub async fn update_profile(
     .bind(&input.diet)
     .bind(input.days_per_week)
     .bind(input.budget_per_day)
-    .bind(input.health_conditions.as_deref())
+    .bind(hc_str.as_deref())
     .fetch_one(&state.pool)
     .await?;
 
     state.cache.invalidate_user(user.id).await;
 
     let response = serde_json::json!({
-        "data": { "profile": profile }
+        "data": { "profile": profile_to_value(profile) }
     });
 
     Ok((StatusCode::OK, AxumJson(response)).into_response())
