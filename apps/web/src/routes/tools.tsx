@@ -89,18 +89,19 @@ function ToolsPage() {
 
 function BMIAnalyzer() {
   const { profile } = useProfile();
-  const [weight, setWeight] = useState(65);
-  const [height, setHeight] = useState(170);
+  const [weight, setWeight] = useState("");
+  const [height, setHeight] = useState("");
 
   useEffect(() => {
     if (profile) {
-      setWeight(profile.weightKg);
-      setHeight(profile.heightCm);
+      setWeight(String(profile.weightKg));
+      setHeight(String(profile.heightCm));
     }
   }, [profile]);
 
-  const hM = height / 100;
-  const bmi = weight / (hM * hM);
+  const hM = Number(height) / 100;
+  const bmi = Number(weight) / (hM * hM);
+  const showResult = weight && height && Number(weight) > 0 && Number(height) > 0;
   const category =
     bmi < 18.5 ? "Underweight" : bmi < 25 ? "Normal" : bmi < 30 ? "Overweight" : "Obese";
   const color =
@@ -124,7 +125,8 @@ function BMIAnalyzer() {
             <input
               type="number"
               value={weight}
-              onChange={(e) => setWeight(Number(e.target.value))}
+              onChange={(e) => setWeight(e.target.value)}
+              placeholder="e.g. 70"
               className="mt-1 w-full rounded-xl border border-border/60 bg-background p-3 text-lg font-bold outline-none"
             />
           </div>
@@ -133,16 +135,20 @@ function BMIAnalyzer() {
             <input
               type="number"
               value={height}
-              onChange={(e) => setHeight(Number(e.target.value))}
+              onChange={(e) => setHeight(e.target.value)}
+              placeholder="e.g. 175"
               className="mt-1 w-full rounded-xl border border-border/60 bg-background p-3 text-lg font-bold outline-none"
             />
           </div>
         </div>
-        <div className="mt-4 rounded-xl bg-background p-4 text-center">
-          <p className="text-xs text-muted-foreground">Your BMI</p>
-          <p className={cn("text-4xl font-black", color)}>{bmi.toFixed(1)}</p>
-          <p className={cn("mt-1 text-sm font-semibold", color)}>{category}</p>
-        </div>
+        {showResult && (
+          <div className="mt-4 rounded-xl bg-background p-4 text-center">
+            <p className="text-xs text-muted-foreground">Your BMI</p>
+            <p className={cn("text-4xl font-black", color)}>{bmi.toFixed(1)}</p>
+            <p className={cn("mt-1 text-sm font-semibold", color)}>{category}</p>
+          </div>
+        )}
+        {showResult && (
         <div className="mt-3 space-y-1.5 text-xs text-muted-foreground">
           {bmi < 18.5 && (
             <p>
@@ -169,6 +175,7 @@ function BMIAnalyzer() {
             • BMI doesn't account for muscle mass. Athletes may show higher BMI while being healthy.
           </p>
         </div>
+        )}
       </div>
     </div>
   );
