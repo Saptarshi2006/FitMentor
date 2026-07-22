@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getCookie, setResponseHeader } from "@tanstack/react-start/server";
+import { getSession, renewSession, createSession, deleteSession, deleteRememberToken } from "@/utils/session";
 
 interface DiscordUser {
   id: string;
@@ -8,54 +9,33 @@ interface DiscordUser {
   avatar?: string;
 }
 
-export interface SessionUser {
-  sub: string;
-  email: string;
-  name: string;
-  provider: string;
-}
-
 const SESSION_COOKIE = "fitmentor_session";
-const REMEMBER_COOKIE = "fitmentor_remember";
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7;
-const REMEMBER_MAX_AGE = 60 * 60 * 24 * 30;
+const COOKIE_FLAGS = `Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${SESSION_MAX_AGE}`;
 
-function signSession(data: SessionUser): string {
-  const secret = process.env.SESSION_SECRET || "dev-secret-change-me";
-  const payload = btoa(JSON.stringify({ ...data, iat: Math.floor(Date.now() / 1000) }));
-  const sig = Array.from(new TextEncoder().encode(secret + payload))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-  return `${payload}.${sig}`;
+function setSessionCookie(sid: string) {
+  setResponseHeader("Set-Cookie", `${SESSION_COOKIE}=${sid}; ${COOKIE_FLAGS}`);
 }
 
-function verifySession(token: string): SessionUser | null {
-  try {
-    const [payload, sig] = token.split(".");
-    if (!payload || !sig) return null;
-    const secret = process.env.SESSION_SECRET || "dev-secret-change-me";
-    const expectedSig = Array.from(new TextEncoder().encode(secret + payload))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-    if (sig !== expectedSig) return null;
-    const data = JSON.parse(atob(payload)) as SessionUser & { iat: number };
-    if (data.iat && Date.now() / 1000 - data.iat > SESSION_MAX_AGE) return null;
-    return { sub: data.sub, email: data.email, name: data.name, provider: data.provider };
-  } catch {
-    return null;
-  }
-}
-
-export function getSessionUser(): SessionUser | null {
-  if (typeof document === "undefined") return null;
-  const m = document.cookie.match(new RegExp(`(?:^|;\\s*)${SESSION_COOKIE}=([^;]*)`));
-  if (!m) return null;
-  return verifySession(decodeURIComponent(m[1]));
+function clearSessionCookie() {
+  setResponseHeader("Set-Cookie", `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`);
 }
 
 export const checkSession = createServerFn({ method: "GET" }).handler(async () => {
-  const raw = getCookie(SESSION_COOKIE);
-  return { ok: !!raw && verifySession(raw) !== null } as const;
+  const sid = getCookie(SESSION_COOKIE);
+  if (sid) {
+    const session = await getSession(sid);
+    if (session) return { ok: true } as const;
+
+    // Session expired or invalid — try renewing from the embedded remember token
+    const newSid = await renewSession(sid);
+    if (newSid) {
+      setSessionCookie(newSid);
+      return { ok: true } as const;
+    }
+  }
+
+  return { ok: false } as const;
 });
 
 export const getDiscordAuthUrl = createServerFn({ method: "GET" })
@@ -72,42 +52,6 @@ export const getDiscordAuthUrl = createServerFn({ method: "GET" })
     if (mode) url.searchParams.set("state", mode);
     return url.toString();
   });
-
-export const renewSession = createServerFn({ method: "POST" }).handler(async () => {
-  const raw = getCookie(REMEMBER_COOKIE);
-  if (!raw) return { ok: false } as const;
-  let sub = "", email = "";
-  try {
-    const data = JSON.parse(atob(raw));
-    sub = data.sub || "";
-    email = data.email || sub;
-  } catch {
-    return { ok: false } as const;
-  }
-  if (!sub) return { ok: false } as const;
-  const apiUrl = process.env.API_URL || "https://16-112-225-113.sslip.io";
-  const apiKey = process.env.API_SHARED_SECRET;
-  if (!apiKey) return { ok: false } as const;
-  const res = await fetch(`${apiUrl}/v1/user/me`, {
-    headers: { "X-Api-Key": apiKey, "X-User-Id": sub, "X-User-Email": email },
-  });
-  if (!res.ok) return { ok: false } as const;
-  const json: unknown = await res.json();
-  const resData = (json as Record<string, unknown>).data as Record<string, unknown> | undefined;
-  const user = resData?.user as Record<string, unknown> | undefined;
-  if (!user?.id) return { ok: false } as const;
-  const session = signSession({
-    sub,
-    email,
-    name: (user.name as string) || "",
-    provider: "discord",
-  });
-  setResponseHeader(
-    "Set-Cookie",
-    `${SESSION_COOKIE}=${session}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MAX_AGE}`,
-  );
-  return { ok: true } as const;
-});
 
 const discordCodec = (d: { code: string; state?: string }) => d;
 
@@ -146,7 +90,6 @@ export const exchangeDiscordCode = createServerFn({ method: "POST" })
     const apiUrl = process.env.API_URL || "https://16-112-225-113.sslip.io";
     const apiKey = process.env.API_SHARED_SECRET || "";
 
-    // If coming from signup, check if user already exists
     if (state === "signup" && apiKey) {
       const existRes = await fetch(`${apiUrl}/v1/user/exists`, {
         headers: {
@@ -161,19 +104,16 @@ export const exchangeDiscordCode = createServerFn({ method: "POST" })
       }
     }
 
-    const session = signSession({
+    const sid = await createSession({
       sub,
       email,
       name: discordUser.username,
       provider: "discord",
     });
+    if (!sid) return { ok: false, error: "session_create_failed" } as const;
 
-    setResponseHeader(
-      "Set-Cookie",
-      `${SESSION_COOKIE}=${session}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MAX_AGE}`,
-    );
+    setSessionCookie(sid);
 
-    // Sync user to backend DB
     if (apiKey) {
       fetch(`${apiUrl}/v1/user/me`, {
         headers: {
@@ -181,7 +121,7 @@ export const exchangeDiscordCode = createServerFn({ method: "POST" })
           "X-User-Id": sub,
           "X-User-Email": email,
         },
-      }).catch((err) => console.error("Failed to sync user to backend:", err));
+      }).catch(() => {});
     }
 
     return {
@@ -195,13 +135,23 @@ export function logout() {
 }
 
 export const clearSession = createServerFn({ method: "POST" }).handler(async () => {
-  setResponseHeader("Set-Cookie", `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+  const sid = getCookie(SESSION_COOKIE);
+  if (sid) {
+    const session = await getSession(sid);
+    if (session?.rememberToken) await deleteRememberToken(session.rememberToken);
+    await deleteSession(sid);
+  }
+  clearSessionCookie();
   return { ok: true } as const;
 });
 
-export function forgetDevice() {
-  clearSession().then(() => {
-    document.cookie = `${REMEMBER_COOKIE}=; Path=/; Max-Age=0`;
-    window.location.href = "/";
-  });
-}
+export const forgetDevice = createServerFn({ method: "POST" }).handler(async () => {
+  const sid = getCookie(SESSION_COOKIE);
+  if (sid) {
+    const session = await getSession(sid);
+    if (session?.rememberToken) await deleteRememberToken(session.rememberToken);
+    await deleteSession(sid);
+  }
+  clearSessionCookie();
+  return { ok: true } as const;
+});

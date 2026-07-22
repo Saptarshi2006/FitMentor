@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Dumbbell } from "lucide-react";
 import logoImg from "@/assets/logo-v2.png";
-import { getDiscordAuthUrl, checkSession, renewSession } from "@/utils/oauth";
+import { getDiscordAuthUrl, checkSession } from "@/utils/oauth";
 
 export const Route = createFileRoute("/signin")({
   head: () => ({ meta: [{ title: "Sign In — FitMentor" }] }),
@@ -18,13 +18,6 @@ function SignInPage() {
     checkSession().then((s) => {
       if (s.ok) {
         navigate({ to: "/dashboard" });
-        return;
-      }
-      if (document.cookie.includes("fitmentor_remember")) {
-        renewSession().then((r) => {
-          if (r.ok) navigate({ to: "/dashboard" });
-          else setChecking(false);
-        });
       } else {
         setChecking(false);
       }

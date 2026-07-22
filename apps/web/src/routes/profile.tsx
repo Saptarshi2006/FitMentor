@@ -209,7 +209,7 @@ function ProfilePage() {
         <button
           onClick={() => {
             if (confirm("This will clear your saved session. You'll need to sign in with Discord again."))
-              forgetDevice();
+              forgetDevice().then(() => { window.location.href = "/"; });
           }}
           className="text-xs text-muted-foreground/50 underline hover:text-muted-foreground"
         >

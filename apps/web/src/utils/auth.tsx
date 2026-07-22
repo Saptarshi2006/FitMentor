@@ -1,19 +1,28 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
-import { getSessionUser, type SessionUser } from "@/utils/oauth";
+import { useAuth as useServerAuth } from "@/utils/oauth";
 
-const AuthContext = createContext<SessionUser | null>(null);
+const AuthContext = createContext<{ user: any | null; loading: boolean }>({
+  user: null,
+  loading: true,
+});
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<SessionUser | null>(null);
+  const serverAuth = useServerAuth();
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    setUser(getSessionUser());
-    const handler = () => setUser(getSessionUser());
-    window.addEventListener("focus", handler);
-    return () => window.removeEventListener("focus", handler);
+    setLoading(false);
   }, []);
-  return <AuthContext.Provider value={user}>{children}</AuthContext.Provider>;
+
+  return (
+    <AuthContext.Provider
+      value={{ user: serverAuth?.user || null, loading }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
-export function useAuth(): SessionUser | null {
+export function useAuth() {
   return useContext(AuthContext);
 }

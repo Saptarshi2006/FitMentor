@@ -1,30 +1,14 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getCookie } from "@tanstack/react-start/server";
 import type { Profile } from "@fitmentor/shared";
+import { getSession } from "@/utils/session";
 
 const SESSION_COOKIE = "fitmentor_session";
-
-function verifySession(token: string): { sub: string; email: string } | null {
-  try {
-    const [payload, sig] = token.split(".");
-    if (!payload || !sig) return null;
-    const secret = process.env.SESSION_SECRET || "dev-secret-change-me";
-    const expectedSig = Array.from(new TextEncoder().encode(secret + payload))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-    if (sig !== expectedSig) return null;
-    const data = JSON.parse(atob(payload)) as { sub: string; email: string; iat: number };
-    if (data.iat && Date.now() / 1000 - data.iat > 60 * 60 * 24 * 7) return null;
-    return { sub: data.sub, email: data.email };
-  } catch {
-    return null;
-  }
-}
 
 export const fetchProfile = createServerFn({ method: "GET" }).handler(async () => {
   const raw = getCookie(SESSION_COOKIE);
   if (!raw) return null;
-  const session = verifySession(raw);
+  const session = await getSession(raw);
   if (!session) return null;
   const apiUrl = process.env.API_URL || "https://16-112-225-113.sslip.io";
   const apiKey = process.env.API_SHARED_SECRET;
@@ -49,8 +33,7 @@ export const syncProfile = createServerFn({ method: "POST" })
   .handler(async ({ data: profile }) => {
     const raw = getCookie(SESSION_COOKIE);
     if (!raw) return { ok: false, error: "no_session" } as const;
-
-    const session = verifySession(raw);
+    const session = await getSession(raw);
     if (!session) return { ok: false, error: "invalid_session" } as const;
 
     const apiUrl = process.env.API_URL || "https://16-112-225-113.sslip.io";

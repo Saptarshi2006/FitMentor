@@ -20,6 +20,11 @@ function initTheme() {
 }
 initTheme();
 
+// Clear legacy client-side remember cookie (replaced by KV-backed session)
+if (typeof document !== "undefined") {
+  document.cookie = "fitmentor_remember=; Path=/; Max-Age=0";
+}
+
 function NotFoundComponent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
