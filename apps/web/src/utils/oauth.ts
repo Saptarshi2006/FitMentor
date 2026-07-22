@@ -63,6 +63,7 @@ export const getDiscordAuthUrl = createServerFn({ method: "GET" })
     url.searchParams.set("response_type", "code");
     url.searchParams.set("scope", "identify email");
     if (mode) url.searchParams.set("state", mode);
+    if (mode === "signin") url.searchParams.set("prompt", "none");
     return url.toString();
   });
 

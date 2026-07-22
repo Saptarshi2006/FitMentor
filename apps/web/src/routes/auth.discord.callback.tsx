@@ -12,6 +12,15 @@ function DiscordCallback() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const errorParam = params.get("error");
+    if (errorParam) {
+      setError(
+        errorParam === "consent_required"
+          ? "Please authorize the app by signing in with the button below"
+          : "Discord authorization was cancelled or denied",
+      );
+      return;
+    }
     const code = params.get("code");
     if (!code) {
       setError("No authorization code received from Discord");
