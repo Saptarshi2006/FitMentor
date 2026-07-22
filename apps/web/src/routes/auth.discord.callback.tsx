@@ -33,7 +33,7 @@ function DiscordCallback() {
           <h1 className="text-xl font-bold text-foreground">Sign in failed</h1>
           <p className="mt-2 text-sm text-muted-foreground">{error}</p>
           <a
-            href="/login"
+            href="/signin"
             className="mt-4 inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
           >
             Try again
