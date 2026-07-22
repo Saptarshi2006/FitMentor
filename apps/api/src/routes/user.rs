@@ -62,14 +62,14 @@ pub async fn get_me(
     auth: AuthUser,
     State(state): State<AppState>,
 ) -> Result<Response, AppError> {
-    let cache_key = format!("cache:user:{}", auth.user_id);
+    let user = upsert_user(&state.pool, &auth.user_id, &auth.email).await?;
+
+    let cache_key = format!("cache:user:{}", user.id);
     if let Some(cached) = state.cache.get(&cache_key).await {
         if let Ok(body) = serde_json::from_str::<serde_json::Value>(&cached) {
             return Ok((StatusCode::OK, AxumJson(body)).into_response());
         }
     }
-
-    let user = upsert_user(&state.pool, &auth.user_id, &auth.email).await?;
 
     let _ = sqlx::query(
         r#"INSERT INTO profiles (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING"#,
@@ -101,6 +101,7 @@ pub async fn get_me(
     });
 
     state.cache.set(&cache_key, &response.to_string(), 300).await;
+    state.cache.delete(&format!("cache:user:{}", auth.user_id)).await;
 
     Ok((StatusCode::OK, AxumJson(response)).into_response())
 }
@@ -161,6 +162,7 @@ pub async fn update_profile(
     .await?;
 
     state.cache.invalidate_user(user.id).await;
+    state.cache.delete(&format!("cache:user:{}", auth.user_id)).await;
 
     let response = serde_json::json!({
         "data": { "profile": profile_to_value(profile) }
@@ -186,6 +188,7 @@ pub async fn update_protein_target(
     .await?;
 
     state.cache.invalidate_user(user.id).await;
+    state.cache.delete(&format!("cache:user:{}", auth.user_id)).await;
 
     let response = serde_json::json!({
         "data": { "customProteinG": input.protein_g }

@@ -31,14 +31,15 @@ pub async fn get_today(
     auth: AuthUser,
     State(state): State<AppState>,
 ) -> Result<Response, AppError> {
-    let cache_key = format!("cache:today:{}", auth.user_id);
+    let user = get_user_id(&state.pool, &auth.user_id).await?;
+
+    let cache_key = format!("cache:today:{}", user.id);
     if let Some(cached) = state.cache.get(&cache_key).await {
         if let Ok(body) = serde_json::from_str::<serde_json::Value>(&cached) {
             return Ok((StatusCode::OK, AxumJson(body)).into_response());
         }
     }
 
-    let user = get_user_id(&state.pool, &auth.user_id).await?;
     let today = Utc::now().date_naive();
 
     let log = sqlx::query_as::<_, DailyLog>(
@@ -91,6 +92,7 @@ pub async fn upsert_today(
     .await?;
 
     state.cache.invalidate_today(user.id).await;
+    state.cache.delete(&format!("cache:today:{}", auth.user_id)).await;
 
     let response = serde_json::json!({ "data": { "log": log } });
     Ok((StatusCode::OK, AxumJson(response)).into_response())

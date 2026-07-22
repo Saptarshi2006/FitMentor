@@ -67,7 +67,7 @@ function Onboarding() {
     }
   };
 
-  const finish = () => {
+  const finish = async () => {
     const p: Profile = {
       name: draft.name ?? "Friend",
       age: Number(draft.age ?? 22),
@@ -84,7 +84,8 @@ function Onboarding() {
       createdAt: new Date().toISOString(),
     };
     saveProfile(p);
-    sync({ data: p }).catch(() => {});
+    const r = await sync({ data: p });
+    if (!r.ok) console.error("syncProfile failed:", r.error);
     navigate({ to: "/dashboard" });
   };
 
