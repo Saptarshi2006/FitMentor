@@ -18,6 +18,7 @@ pub struct DailyLog {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateDailyLog {
     pub water: Option<i32>,
     pub sleep: Option<f32>,

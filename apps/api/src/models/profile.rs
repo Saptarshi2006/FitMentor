@@ -24,6 +24,7 @@ pub struct Profile {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateProfile {
     pub name: Option<String>,
     pub age: Option<i32>,
@@ -40,6 +41,7 @@ pub struct UpdateProfile {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProteinTarget {
     pub protein_g: Option<f32>,
 }
