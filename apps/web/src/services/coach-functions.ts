@@ -36,6 +36,22 @@ const Input = z.object({
     .optional(),
 });
 
+function cfEnv(): Record<string, unknown> | null {
+  try {
+    const key = Symbol.for("tanstack-start:event-storage");
+    const store = (globalThis as any)[key]?.getStore?.();
+    const event: any = store?.h3Event;
+    return event?.req?.runtime?.cloudflare?.env ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function env(key: string): string | undefined {
+  const cf = cfEnv();
+  return (cf?.[key] as string | undefined) ?? process.env[key] ?? undefined;
+}
+
 export const askCoach = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => Input.parse(d))
   .handler(async ({ data }) => {
@@ -73,25 +89,23 @@ ${profileBlock}`;
     const sid = getCookie(SESSION_COOKIE);
     const session = sid ? await getSession(sid) : null;
     if (session?.sub) {
-      const apiUrl = process.env.API_URL || "https://16-112-225-113.sslip.io";
-      const apiKey = process.env.API_SHARED_SECRET;
-      if (apiKey) {
-        const lastUserMsg = [...data.messages].reverse().find((m) => m.role === "user");
-        fetch(`${apiUrl}/v1/coach/log`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Api-Key": apiKey,
-            "X-User-Id": session.sub,
-            "X-User-Email": session.email,
-          },
-          body: JSON.stringify({
-            user_message: lastUserMsg?.content ?? "",
-            reply,
-            container_tag: session.sub,
-          }),
-        }).catch(() => {});
-      }
+      const apiUrl = env("API_URL") || "https://16-112-225-113.sslip.io";
+      const apiKey = env("API_SHARED_SECRET");
+      const lastUserMsg = [...data.messages].reverse().find((m) => m.role === "user");
+      fetch(`${apiUrl}/v1/coach/log`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Api-Key": apiKey ?? "",
+          "X-User-Id": session.sub,
+          "X-User-Email": session.email,
+        },
+        body: JSON.stringify({
+          user_message: lastUserMsg?.content ?? "",
+          reply,
+          container_tag: session.sub,
+        }),
+      }).catch(() => {});
     }
 
     return { reply };
