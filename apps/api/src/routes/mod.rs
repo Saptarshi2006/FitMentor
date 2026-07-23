@@ -1,5 +1,6 @@
 pub mod coach;
 pub mod coach_log;
+pub mod coach_sessions;
 pub mod health;
 pub mod logs;
 pub mod payments;
@@ -29,6 +30,14 @@ pub fn routes(state: AppState) -> Router {
         // AI Coach (Epic 6)
         .route("/v1/coach/chat", axum::routing::post(coach::chat))
         .route("/v1/coach/log", axum::routing::post(coach_log::log))
+        .route(
+            "/v1/coach/sessions",
+            axum::routing::get(coach_sessions::list).post(coach_sessions::create),
+        )
+        .route(
+            "/v1/coach/sessions/{id}",
+            axum::routing::get(coach_sessions::get).delete(coach_sessions::delete),
+        )
         // Payments (Epic 7)
         .route(
             "/v1/subscriptions/checkout",

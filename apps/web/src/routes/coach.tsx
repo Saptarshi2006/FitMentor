@@ -1,13 +1,22 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { MobileShell } from "@/components/MobileShell";
 import { askCoach } from "@/services/coach-functions";
 import { useProfile, calcTargets } from "@/utils/profile";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Send } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Sparkles, Send, Menu, Plus, Trash2, History, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
+import {
+  listSessions,
+  createSession,
+  loadSession,
+  deleteSession,
+  type SessionListItem,
+  type SessionMessage,
+} from "@/services/coach-sessions.server";
 
 export const Route = createFileRoute("/coach")({
   head: () => ({ meta: [{ title: "AI Coach — FitMentor" }] }),
@@ -29,24 +38,96 @@ function Coach() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<SessionListItem[]>([]);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const { profile } = useProfile();
+
+  const list = useServerFn(listSessions);
+  const create = useServerFn(createSession);
+  const load = useServerFn(loadSession);
+  const del = useServerFn(deleteSession);
+
+  const loadSessions = useCallback(async () => {
+    setSessionsLoading(true);
+    try {
+      setSessions(await list());
+    } catch { /* ignore */ }
+    setSessionsLoading(false);
+  }, [list]);
+
+  useEffect(() => {
+    loadSessions();
+  }, [loadSessions]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
+  async function switchSession(id: string) {
+    try {
+      const full = await load({ data: { id } });
+      const msgs: Msg[] = (full.messages || []).map((m: SessionMessage) => ({
+        role: m.role,
+        content: m.content,
+      }));
+      setMessages(msgs);
+      setActiveId(id);
+      setSheetOpen(false);
+    } catch {
+      toast.error("Could not load session");
+    }
+  }
+
+  async function newSession() {
+    setMessages([]);
+    setActiveId(null);
+    setSheetOpen(false);
+  }
+
+  async function removeSession(e: React.MouseEvent, id: string) {
+    e.stopPropagation();
+    try {
+      await del({ data: { id } });
+      if (activeId === id) {
+        setMessages([]);
+        setActiveId(null);
+      }
+      setSessions((prev) => prev.filter((s) => s.id !== id));
+    } catch {
+      toast.error("Could not delete session");
+    }
+  }
+
   async function send(text: string) {
     const q = text.trim();
     if (!q || loading) return;
     const profileWithTargets = profile ? { ...profile, ...calcTargets(profile) } : undefined;
+
+    let sid = activeId;
+    if (!sid) {
+      try {
+        const created = await create({ data: {} });
+        sid = created.id;
+        setActiveId(sid);
+      } catch {
+        toast.error("Could not create session");
+        return;
+      }
+    }
+
     const newMsgs: Msg[] = [...messages, { role: "user", content: q }];
     setMessages(newMsgs);
     setInput("");
     setLoading(true);
     try {
-      const res = await ask({ data: { messages: newMsgs, profile: profileWithTargets } });
+      const res = await ask({
+        data: { session_id: sid, messages: newMsgs, profile: profileWithTargets },
+      });
       setMessages([...newMsgs, { role: "assistant", content: res.reply }]);
+      loadSessions();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Coach is unavailable right now.";
       toast.error(msg);
@@ -55,10 +136,77 @@ function Coach() {
     }
   }
 
+  function formatDate(iso: string) {
+    const d = new Date(iso);
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffDays = Math.floor(diffMs / 86400000);
+    if (diffDays === 0) return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    if (diffDays === 1) return "Yesterday";
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return d.toLocaleDateString([], { day: "numeric", month: "short" });
+  }
+
   return (
     <MobileShell>
       <div className="sticky top-0 z-10 border-b border-white/5 bg-background/70 px-5 pb-4 pt-14 backdrop-blur-2xl">
         <div className="flex items-center gap-3">
+          <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+            <SheetTrigger asChild>
+              <button className="-ml-1 flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground hover:bg-accent">
+                <Menu className="h-5 w-5" />
+              </button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-72 p-0">
+              <SheetHeader className="border-b border-border/60 px-4 py-4">
+                <SheetTitle className="flex items-center gap-2 text-base">
+                  <History className="h-4 w-4" /> Recents
+                </SheetTitle>
+              </SheetHeader>
+              <div className="p-3">
+                <button
+                  onClick={newSession}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-primary transition hover:bg-primary/10"
+                >
+                  <Plus className="h-4 w-4" />
+                  New Chat
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto px-3 pb-4">
+                {sessions.length === 0 && (
+                  <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+                    {sessionsLoading ? "Loading…" : "No conversations yet"}
+                  </p>
+                )}
+                {sessions.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => switchSession(s.id)}
+                    className={`w-full rounded-lg px-3 py-2.5 text-left text-sm transition hover:bg-accent ${
+                      activeId === s.id ? "bg-accent" : ""
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">{s.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatDate(s.created_at)} · {s.message_count} messages
+                        </p>
+                      </div>
+                      <button
+                        onClick={(e) => removeSession(e, s.id)}
+                        className="mt-0.5 shrink-0 rounded p-1 text-muted-foreground opacity-0 transition hover:text-destructive group-hover:opacity-100"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </SheetContent>
+          </Sheet>
+
           <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-hero text-primary-foreground shadow-glow">
             <Sparkles className="h-5 w-5" />
             <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-background bg-emerald-400" />
@@ -76,7 +224,7 @@ function Coach() {
             <div className="rounded-2xl border border-border/60 bg-card p-4">
               <p className="text-sm">
                 Hey! I'm your coach. Ask me anything about training, nutrition, or your plan.
-                I know your goals, diet, and budget — so my answers are made just for you. 💪
+                I know your goals, diet, and budget — so my answers are made just for you.
               </p>
             </div>
             <p className="px-1 text-xs uppercase tracking-widest text-muted-foreground">Try asking</p>

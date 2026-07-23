@@ -7,6 +7,7 @@ import { getSession } from "@/utils/session";
 const SESSION_COOKIE = "fitmentor_session";
 
 const Input = z.object({
+  session_id: z.string().optional(),
   messages: z
     .array(
       z.object({
@@ -89,6 +90,7 @@ ${profileBlock}`;
             user_message: lastUserMsg?.content ?? "",
             reply,
             container_tag: session.sub,
+            session_id: data.session_id || null,
           }),
         });
         if (!res.ok) {
