@@ -17,33 +17,34 @@ pub struct LogResponse {
     pub ok: bool,
 }
 
-/// POST /v1/coach/log — save a coach exchange to Postgres + Supermemory.
+const INGEST_URL: &str = "http://ingest:8001/v1/ingest";
+
+/// POST /v1/coach/log — save metadata to Postgres, forward content to Python ingest.
 pub async fn log(
     State(state): State<AppState>,
     AuthUser { user_id, .. }: AuthUser,
     Json(req): Json<LogRequest>,
 ) -> Result<Json<LogResponse>, crate::error::AppError> {
-    let messages = serde_json::json!([
-        { "role": "user", "content": req.user_message },
-        { "role": "assistant", "content": req.reply },
-    ]);
+    sqlx::query("INSERT INTO coach_logs (user_id, container_tag) VALUES ($1, $2)")
+        .bind(&user_id)
+        .bind(&req.container_tag)
+        .execute(&state.pool)
+        .await?;
 
-    sqlx::query(
-        "INSERT INTO coach_logs (user_id, container_tag, messages) VALUES ($1, $2, $3)",
-    )
-    .bind(&user_id)
-    .bind(&req.container_tag)
-    .bind(&messages)
-    .execute(&state.pool)
-    .await?;
+    let content = format!("user: {}\nassistant: {}", req.user_message, req.reply);
+    let ct = req.container_tag.clone();
 
-    if state.supermemory.is_enabled() {
-        let content = format!("user: {}\nassistant: {}", req.user_message, req.reply);
-        let _ = state
-            .supermemory
-            .ingest(&req.container_tag, &content)
+    tokio::spawn(async move {
+        let client = reqwest::Client::new();
+        let _ = client
+            .post(INGEST_URL)
+            .json(&serde_json::json!({
+                "container_tag": ct,
+                "content": content,
+            }))
+            .send()
             .await;
-    }
+    });
 
     Ok(Json(LogResponse { ok: true }))
 }

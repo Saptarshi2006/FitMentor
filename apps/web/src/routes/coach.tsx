@@ -46,8 +46,6 @@ function Coach() {
     setLoading(true);
     try {
       const res = await ask({ data: { messages: newMsgs, profile: profileWithTargets } });
-      // ponytail: debug log status — remove when confirmed working
-      console.log("coach log:", (res as any)._log);
       setMessages([...newMsgs, { role: "assistant", content: res.reply }]);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Coach is unavailable right now.";

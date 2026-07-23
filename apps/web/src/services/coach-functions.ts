@@ -72,7 +72,6 @@ ${profileBlock}`;
 
     const sid = getCookie(SESSION_COOKIE);
     const session = sid ? await getSession(sid) : null;
-    let _log: Record<string, unknown> | null = null;
     if (session?.sub) {
       const apiUrl = process.env.API_URL || "https://16-112-225-113.sslip.io";
       const apiKey = process.env.API_SHARED_SECRET;
@@ -92,17 +91,14 @@ ${profileBlock}`;
             container_tag: session.sub,
           }),
         });
-        _log = { ok: res.ok, status: res.status, apiKeyPresent: !!apiKey, apiUrl, hasSession: true };
         if (!res.ok) {
-          const text = await res.text().catch(() => "");
-          _log.body = text;
+          const text = await res.text().catch(() => "?");
+          console.error("coach log fail:", res.status, text);
         }
       } catch (e: unknown) {
-        _log = { ok: false, err: e instanceof Error ? e.message : String(e), apiKeyPresent: !!apiKey, apiUrl, hasSession: true };
+        console.error("coach log error:", e instanceof Error ? e.message : String(e));
       }
-    } else {
-      _log = { ok: false, err: "no_session", cookiePresent: !!sid };
     }
 
-    return { reply, _log };
+    return { reply };
   });

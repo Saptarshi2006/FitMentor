@@ -8,7 +8,6 @@ pub struct Config {
     // Epic 6: AI Coach
     pub mongodb_url: String,
     pub mongodb_db: String,
-    pub supermemory_api_key: String,
     pub llm_api_key: String,
     pub llm_model: String,
     // Epic 7: Payments
@@ -38,8 +37,6 @@ impl Config {
                 .unwrap_or_else(|_| "mongodb://localhost:27017".into()),
             mongodb_db: std::env::var("MONGODB_DB")
                 .unwrap_or_else(|_| "fitmentor".into()),
-            supermemory_api_key: std::env::var("SUPERMEMORY_API_KEY")
-                .unwrap_or_default(),
             llm_api_key: std::env::var("LLM_API_KEY")
                 .unwrap_or_default(),
             llm_model: std::env::var("LLM_MODEL")

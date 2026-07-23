@@ -59,7 +59,6 @@ services:
       KAFKA_BROKERS: kafka:9092
       PORT: "3000"
       POLAR_WEBHOOK_SECRET: ${POLAR_WEBHOOK_SECRET:-}
-      SUPERMEMORY_API_KEY: ${SUPERMEMORY_API_KEY:-}
     depends_on:
       - postgres
       - redis
@@ -74,6 +73,15 @@ services:
       REDIS_URL: redis://redis:6379
     depends_on:
       - redis
+
+  ingest:
+    build:
+      context: .
+      dockerfile: apps/ingest-python/Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      SUPERMEMORY_API_KEY: ${SUPERMEMORY_API_KEY:-}
 
   tigerbeetle:
     image: ghcr.io/tigerbeetle/tigerbeetle
