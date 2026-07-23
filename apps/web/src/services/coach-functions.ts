@@ -1,6 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
+import { getCookie } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { chatCompletion, type ChatMessage } from "./ai-gateway.server";
+import { getSession } from "@/utils/session";
+import Supermemory from "supermemory";
+
+const SESSION_COOKIE = "fitmentor_session";
 
 const Input = z.object({
   messages: z
@@ -51,6 +56,29 @@ ${healthStr}
 - Daily targets: ${p.calories} kcal, ${p.protein} g protein`
       : "User has not completed onboarding yet.";
 
+    const sid = getCookie(SESSION_COOKIE);
+    const session = sid ? await getSession(sid) : null;
+    let memoryContext = "";
+    if (session?.sub) {
+      try {
+        const sm = new Supermemory();
+        const lastMsg = [...data.messages].reverse().find((m) => m.role === "user");
+        const result = await sm.profile({
+          containerTag: session.sub,
+          q: lastMsg?.content ?? "",
+        });
+        const facts = result.profile?.static?.length
+          ? `\n\nWhat I know about you:\n${result.profile.static.join("\n")}`
+          : "";
+        const memories = result.searchResults?.results?.length
+          ? `\n\nFrom your past conversations:\n${result.searchResults.results.slice(0, 4).map((r: any) => r.memory || r.chunk).join("\n")}`
+          : "";
+        memoryContext = facts + memories;
+      } catch {
+        // Supermemory unavailable — continue without RAG
+      }
+    }
+
     const system = `You are FitMentor, a warm, no-nonsense AI fitness coach for Indian gym beginners and students.
 Rules:
 - Be concise. Use short paragraphs and bullet points. Never write essays.
@@ -61,9 +89,23 @@ Rules:
 - Don't push supplements. Whey is optional, not required.
 - Always end with one clear next step the user can do today.
 
-${profileBlock}`;
+${profileBlock}${memoryContext}`;
 
     const messages: ChatMessage[] = [{ role: "system", content: system }, ...data.messages];
     const reply = await chatCompletion({ messages });
+
+    if (session?.sub) {
+      try {
+        const sm = new Supermemory();
+        const lastUserMsg = [...data.messages].reverse().find((m) => m.role === "user");
+        await sm.add({
+          content: `user: ${lastUserMsg?.content}\nassistant: ${reply}`,
+          containerTag: session.sub,
+        });
+      } catch {
+        // non-critical
+      }
+    }
+
     return { reply };
   });
