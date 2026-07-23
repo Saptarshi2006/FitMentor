@@ -1,5 +1,3 @@
-import { getLocalResponse } from "./local-coach";
-
 export type ChatMessage = {
   role: "system" | "user" | "assistant";
   content: string;
@@ -21,12 +19,7 @@ export async function chatCompletion(opts: {
   messages: ChatMessage[];
 }): Promise<string> {
   const ai = getAI();
-
-  if (!ai) {
-    const systemMsg = opts.messages.find((m) => m.role === "system");
-    const profile = systemMsg?.content ?? "";
-    return getLocalResponse(opts.messages, profile);
-  }
+  if (!ai) throw new Error("AI unavailable — deploy to Cloudflare Workers.");
 
   try {
     const response = await ai.run(
