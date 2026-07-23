@@ -1,0 +1,17 @@
+name = "fitmentor"
+compatibility_date = "2026-07-20"
+compatibility_flags = ["nodejs_compat"]
+
+pages_build_output_dir = "dist"
+
+[[kv_namespaces]]
+binding = "fitmentor_sessions"
+id = "712dbd1cf4c64aa5a09700f783b041b9"
+
+# === Set these in Cloudflare Pages dashboard → Settings → Environment variables ===
+# DISCORD_CLIENT_ID=
+# DISCORD_CLIENT_SECRET=
+# SESSION_SECRET=
+# APP_URL=
+# API_SHARED_SECRET=
+# API_URL=
