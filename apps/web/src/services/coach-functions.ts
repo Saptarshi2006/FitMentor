@@ -36,22 +36,6 @@ const Input = z.object({
     .optional(),
 });
 
-function cfEnv(): Record<string, unknown> | null {
-  try {
-    const key = Symbol.for("tanstack-start:event-storage");
-    const store = (globalThis as any)[key]?.getStore?.();
-    const event: any = store?.h3Event;
-    return event?.req?.runtime?.cloudflare?.env ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function env(key: string): string | undefined {
-  const cf = cfEnv();
-  return (cf?.[key] as string | undefined) ?? process.env[key] ?? undefined;
-}
-
 export const askCoach = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => Input.parse(d))
   .handler(async ({ data }) => {
@@ -88,25 +72,37 @@ ${profileBlock}`;
 
     const sid = getCookie(SESSION_COOKIE);
     const session = sid ? await getSession(sid) : null;
+    let _log: Record<string, unknown> | null = null;
     if (session?.sub) {
-      const apiUrl = env("API_URL") || "https://16-112-225-113.sslip.io";
-      const apiKey = env("API_SHARED_SECRET");
+      const apiUrl = process.env.API_URL || "https://16-112-225-113.sslip.io";
+      const apiKey = process.env.API_SHARED_SECRET;
       const lastUserMsg = [...data.messages].reverse().find((m) => m.role === "user");
-      fetch(`${apiUrl}/v1/coach/log`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Api-Key": apiKey ?? "",
-          "X-User-Id": session.sub,
-          "X-User-Email": session.email,
-        },
-        body: JSON.stringify({
-          user_message: lastUserMsg?.content ?? "",
-          reply,
-          container_tag: session.sub,
-        }),
-      }).catch(() => {});
+      try {
+        const res = await fetch(`${apiUrl}/v1/coach/log`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Api-Key": apiKey ?? "",
+            "X-User-Id": session.sub,
+            "X-User-Email": session.email,
+          },
+          body: JSON.stringify({
+            user_message: lastUserMsg?.content ?? "",
+            reply,
+            container_tag: session.sub,
+          }),
+        });
+        _log = { ok: res.ok, status: res.status, apiKeyPresent: !!apiKey, apiUrl, hasSession: true };
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          _log.body = text;
+        }
+      } catch (e: unknown) {
+        _log = { ok: false, err: e instanceof Error ? e.message : String(e), apiKeyPresent: !!apiKey, apiUrl, hasSession: true };
+      }
+    } else {
+      _log = { ok: false, err: "no_session", cookiePresent: !!sid };
     }
 
-    return { reply };
+    return { reply, _log };
   });
