@@ -5,7 +5,6 @@ import { chatCompletion, type ChatMessage } from "./ai-gateway.server";
 import { getSession } from "@/utils/session";
 
 const SESSION_COOKIE = "fitmentor_session";
-const SM_API = "https://api.supermemory.ai";
 
 const Input = z.object({
   messages: z
@@ -37,34 +36,6 @@ const Input = z.object({
     .optional(),
 });
 
-function smHeaders() {
-  const key = process.env.SUPERMEMORY_API_KEY;
-  if (!key) return null;
-  return { Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
-}
-
-async function smProfile(containerTag: string, q: string) {
-  const headers = smHeaders();
-  if (!headers) return null;
-  const res = await fetch(`${SM_API}/v4/profile`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ containerTag, q }),
-  });
-  if (!res.ok) return null;
-  return res.json();
-}
-
-async function smAdd(content: string, containerTag: string) {
-  const headers = smHeaders();
-  if (!headers) return;
-  await fetch(`${SM_API}/v3/documents`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ content, containerTag }),
-  });
-}
-
 export const askCoach = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => Input.parse(d))
   .handler(async ({ data }) => {
@@ -84,27 +55,6 @@ ${healthStr}
 - Daily targets: ${p.calories} kcal, ${p.protein} g protein`
       : "User has not completed onboarding yet.";
 
-    const sid = getCookie(SESSION_COOKIE);
-    const session = sid ? await getSession(sid) : null;
-    let memoryContext = "";
-    if (session?.sub) {
-      try {
-        const lastMsg = [...data.messages].reverse().find((m) => m.role === "user");
-        const result: any = await smProfile(session.sub, lastMsg?.content ?? "");
-        if (result) {
-          const facts = result.profile?.static?.length
-            ? `\n\nWhat I know about you:\n${result.profile.static.join("\n")}`
-            : "";
-          const memories = result.searchResults?.results?.length
-            ? `\n\nFrom your past conversations:\n${result.searchResults.results.slice(0, 4).map((r: any) => r.memory || r.chunk).join("\n")}`
-            : "";
-          memoryContext = facts + memories;
-        }
-      } catch {
-        // Supermemory unavailable — continue without RAG
-      }
-    }
-
     const system = `You are FitMentor, a warm, no-nonsense AI fitness coach for Indian gym beginners and students.
 Rules:
 - Be concise. Use short paragraphs and bullet points. Never write essays.
@@ -115,17 +65,32 @@ Rules:
 - Don't push supplements. Whey is optional, not required.
 - Always end with one clear next step the user can do today.
 
-${profileBlock}${memoryContext}`;
+${profileBlock}`;
 
     const messages: ChatMessage[] = [{ role: "system", content: system }, ...data.messages];
     const reply = await chatCompletion({ messages });
 
+    const sid = getCookie(SESSION_COOKIE);
+    const session = sid ? await getSession(sid) : null;
     if (session?.sub) {
-      try {
+      const apiUrl = process.env.API_URL || "https://16-112-225-113.sslip.io";
+      const apiKey = process.env.API_SHARED_SECRET;
+      if (apiKey) {
         const lastUserMsg = [...data.messages].reverse().find((m) => m.role === "user");
-        await smAdd(`user: ${lastUserMsg?.content}\nassistant: ${reply}`, session.sub);
-      } catch {
-        // non-critical
+        fetch(`${apiUrl}/v1/coach/log`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Api-Key": apiKey,
+            "X-User-Id": session.sub,
+            "X-User-Email": session.email,
+          },
+          body: JSON.stringify({
+            user_message: lastUserMsg?.content ?? "",
+            reply,
+            container_tag: session.sub,
+          }),
+        }).catch(() => {});
       }
     }
 

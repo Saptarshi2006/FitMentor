@@ -59,6 +59,7 @@ services:
       KAFKA_BROKERS: kafka:9092
       PORT: "3000"
       POLAR_WEBHOOK_SECRET: ${POLAR_WEBHOOK_SECRET:-}
+      SUPERMEMORY_API_KEY: ${SUPERMEMORY_API_KEY:-}
     depends_on:
       - postgres
       - redis

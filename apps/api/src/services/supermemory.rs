@@ -1,10 +1,8 @@
-#![allow(dead_code)]
-
 use serde::{Deserialize, Serialize};
 
-/// Supermemory client stub.
-/// Full implementation: https://docs.supermemory.ai
-/// Ponytail: HTTP client with API key, 3 endpoints (get context, search, ingest).
+const SM_API: &str = "https://api.supermemory.ai";
+
+#[derive(Clone)]
 pub struct SupermemoryClient {
     api_key: String,
     http: reqwest::Client,
@@ -24,34 +22,56 @@ impl SupermemoryClient {
         }
     }
 
+    pub fn is_enabled(&self) -> bool {
+        !self.api_key.is_empty()
+    }
+
     /// Get user context from Supermemory for coach prompts.
     pub async fn get_user_context(&self, _user_id: &str) -> anyhow::Result<MemoryContext> {
-        if self.api_key.is_empty() {
-            // Stub: return empty context when no key
+        if !self.is_enabled() {
             return Ok(MemoryContext {
                 user_profile: None,
                 relevant_memories: vec![],
             });
         }
-        // TODO: GET https://api.supermemory.ai/v1/memories?user_id={user_id}
-        todo!("Supermemory get_user_context")
+        // TODO: POST /v4/profile
+        Ok(MemoryContext {
+            user_profile: None,
+            relevant_memories: vec![],
+        })
     }
 
     /// Search relevant memories for a query.
     pub async fn search(&self, _user_id: &str, _query: &str) -> anyhow::Result<Vec<String>> {
-        if self.api_key.is_empty() {
+        if !self.is_enabled() {
             return Ok(vec![]);
         }
-        // TODO: POST https://api.supermemory.ai/v1/search
-        todo!("Supermemory search")
+        // TODO: POST /v4/search
+        Ok(vec![])
     }
 
-    /// Ingest a conversation summary after chat.
-    pub async fn ingest(&self, _user_id: &str, _content: &str) -> anyhow::Result<()> {
-        if self.api_key.is_empty() {
+    /// Store a conversation exchange in Supermemory.
+    pub async fn ingest(&self, container_tag: &str, content: &str) -> anyhow::Result<()> {
+        if !self.is_enabled() {
             return Ok(());
         }
-        // TODO: POST https://api.supermemory.ai/v1/memories
-        todo!("Supermemory ingest")
+        let body = serde_json::json!({
+            "content": content,
+            "containerTag": container_tag,
+        });
+        let res = self
+            .http
+            .post(format!("{SM_API}/v3/documents"))
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await?;
+        if !res.status().is_success() {
+            let status = res.status();
+            let text = res.text().await.unwrap_or_default();
+            anyhow::bail!("Supermemory ingest failed ({status}): {text}");
+        }
+        Ok(())
     }
 }

@@ -1,4 +1,5 @@
 pub mod coach;
+pub mod coach_log;
 pub mod health;
 pub mod logs;
 pub mod payments;
@@ -27,6 +28,7 @@ pub fn routes(state: AppState) -> Router {
         .route("/v1/logs/streak", axum::routing::get(logs::get_streak))
         // AI Coach (Epic 6)
         .route("/v1/coach/chat", axum::routing::post(coach::chat))
+        .route("/v1/coach/log", axum::routing::post(coach_log::log))
         // Payments (Epic 7)
         .route(
             "/v1/subscriptions/checkout",

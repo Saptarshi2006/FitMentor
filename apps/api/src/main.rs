@@ -16,6 +16,7 @@ use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::EnvFilter;
 
 use crate::services::cache::CacheService;
+use crate::services::supermemory::SupermemoryClient;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -24,6 +25,7 @@ pub struct AppState {
     pub jwt_validator: Arc<JwtValidator>,
     pub polar_webhook_secret: String,
     pub api_shared_secret: String,
+    pub supermemory: SupermemoryClient,
 }
 
 #[tokio::main]
@@ -47,12 +49,15 @@ async fn main() {
         config.cf_access_aud,
     ));
 
+    let supermemory = SupermemoryClient::new(config.supermemory_api_key);
+
     let state = AppState {
         pool,
         cache,
         jwt_validator,
         polar_webhook_secret: config.polar_webhook_secret,
         api_shared_secret: config.api_shared_secret,
+        supermemory,
     };
 
     let cors = CorsLayer::new()
