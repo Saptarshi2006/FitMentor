@@ -28,12 +28,13 @@ macro_rules! make_get_handlers {
         ) -> Result<Response, AppError> {
             let today = Utc::now().date_naive();
             let table = stringify!($table);
+            let pool = state.shard_router.get_pool_for_user(&auth.user_id);
             let row = sqlx::query_as::<_, PlanRow>(
                 &format!("SELECT plan FROM {table} WHERE user_id = $1 AND date = $2"),
             )
             .bind(&auth.user_id)
             .bind(today)
-            .fetch_optional(&state.pool)
+            .fetch_optional(pool)
             .await?;
 
             match row {
@@ -64,6 +65,7 @@ macro_rules! make_upsert_handlers {
             let today = Utc::now().date_naive();
             let table = stringify!($table);
             let user_id = auth.user_id.clone();
+            let pool = state.shard_router.get_pool_for_user(&user_id);
 
             sqlx::query(&format!(
                 "INSERT INTO {table} (user_id, date, plan) VALUES ($1, $2, $3)
@@ -72,7 +74,7 @@ macro_rules! make_upsert_handlers {
             .bind(&user_id)
             .bind(today)
             .bind(&input.plan)
-            .execute(&state.pool)
+            .execute(pool)
             .await?;
 
             let resp = serde_json::json!({ "data": { "plan": input.plan } });

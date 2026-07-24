@@ -1,8 +1,7 @@
-use sqlx::postgres::{PgPool, PgPoolOptions};
+pub mod shard;
 
-pub async fn create_pool(database_url: &str) -> Result<PgPool, sqlx::Error> {
-    PgPoolOptions::new()
-        .max_connections(10)
-        .connect(database_url)
-        .await
+/// Create a ShardRouter from comma-separated database URLs.
+/// If only one URL is provided, acts as a single-shard router.
+pub async fn create_shard_router(urls: &[String]) -> Result<shard::ShardRouter, sqlx::Error> {
+    shard::ShardRouter::new(urls).await
 }

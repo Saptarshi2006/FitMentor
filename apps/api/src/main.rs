@@ -13,7 +13,10 @@ use axum::http::Method;
 use axum::Router;
 use config::Config;
 use db::shard::ShardRouter;
+<<<<<<< Updated upstream
 use graphql::schema::create_schema;
+=======
+>>>>>>> Stashed changes
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::EnvFilter;
@@ -130,7 +133,6 @@ async fn run_migrations(pool: &sqlx::PgPool) {
     .await
     .expect("failed to create workout_plans table");
 
-    // Ensure unique indexes exist (idempotent)
     sqlx::query(
         r#"CREATE UNIQUE INDEX IF NOT EXISTS idx_meal_plans_user_date ON meal_plans(user_id, date)"#,
     )
@@ -285,6 +287,7 @@ async fn main() {
             "x-user-email".parse().unwrap(),
         ]);
 
+<<<<<<< Updated upstream
     let graphql_routes = Router::new()
         .route(
             "/graphql",
@@ -295,6 +298,10 @@ async fn main() {
         .merge(graphql_routes)
         .layer(cors)
         .with_state(state);
+=======
+    // routes() takes AppState and returns Router (already has .with_state)
+    let app = routes::routes(state).layer(cors);
+>>>>>>> Stashed changes
 
     let addr = format!("0.0.0.0:{}", config.port);
     let listener = tokio::net::TcpListener::bind(&addr)
