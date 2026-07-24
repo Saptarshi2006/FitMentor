@@ -161,7 +161,6 @@ pub async fn update_profile(
     state.cache.invalidate_user(&user.id.to_string()).await;
     state.cache.delete(&format!("cache:user:{}", auth.user_id)).await;
 
-    // Trigger daily-planner to generate plans for this user (fire-and-forget)
     let planner_url = state.planner_url.clone();
     let user_id = auth.user_id.clone();
     tokio::spawn(async move {
@@ -240,7 +239,10 @@ pub async fn upsert_subscription(
     let user = get_user_by_cf_sub(pool, &auth.user_id).await?;
     let status = input.status.as_deref().unwrap_or("active");
 
+<<<<<<< Updated upstream
     // Check if subscription exists
+=======
+>>>>>>> Stashed changes
     let existing = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM subscriptions WHERE user_id = $1)",
     )

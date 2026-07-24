@@ -121,7 +121,7 @@ pub async fn discord_callback(
     .bind(&cf_sub)
     .bind(&email)
     .bind(username)
-    .fetch_one(&state.pool)
+    .fetch_one(state.shard_router.get_pool_for_user(&cf_sub))
     .await
     {
         Ok(u) => u,

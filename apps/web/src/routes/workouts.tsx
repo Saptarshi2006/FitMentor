@@ -31,8 +31,11 @@ function Workouts() {
     setFetchError(false);
     if (!profile) { setLoading(false); return; }
     setLoading(true);
+<<<<<<< Updated upstream
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 20000);
+=======
+>>>>>>> Stashed changes
     getClient()
       .request<{ todayAiPlan: { plan: WorkoutDay[] } | null }>(TODAY_AI_PLAN_QUERY, { table: "workout_plans" })
       .then((data) => {
@@ -40,8 +43,7 @@ function Workouts() {
         setPlan(Array.isArray(plan) ? plan : []);
       })
       .catch(() => setFetchError(true))
-      .finally(() => { clearTimeout(timeout); setLoading(false); });
-    return () => { controller.abort(); clearTimeout(timeout); };
+      .finally(() => setLoading(false));
   }, [profile]);
 
   useEffect(() => {
