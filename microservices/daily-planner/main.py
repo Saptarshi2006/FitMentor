@@ -88,9 +88,11 @@ def call_cf_ai(system: str, prompt: str, max_tokens: int = 2048) -> str:
             .get("choices", [{}])[0]
             .get("message", {})
             .get("content")
-            or data.get("result", {}).get("response")
             or ""
         )
+        if not raw:
+            response_val = data.get("result", {}).get("response")
+            raw = json.dumps(response_val, ensure_ascii=False) if response_val else ""
         return raw.replace("```json", "").replace("```", "").strip()
 
 
