@@ -44,5 +44,14 @@ apps/api/*.db
 apps/ws/build/
 build/
 
+# AI agent config
+.lovable/
+.mimocode/
+.opencode/
+openspec/
+AGENTS.md
+_bmad/
+_bmad-output/
+
 # Redis
 dump.rdb

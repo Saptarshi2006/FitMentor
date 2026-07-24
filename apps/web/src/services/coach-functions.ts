@@ -1,8 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
+import { getCookie } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { chatCompletion, type ChatMessage } from "./ai-gateway.server";
+import { getSession } from "@/utils/session";
+
+const SESSION_COOKIE = "fitmentor_session";
 
 const Input = z.object({
+  session_id: z.string().optional(),
   messages: z
     .array(
       z.object({
@@ -65,5 +70,37 @@ ${profileBlock}`;
 
     const messages: ChatMessage[] = [{ role: "system", content: system }, ...data.messages];
     const reply = await chatCompletion({ messages });
+
+    const sid = getCookie(SESSION_COOKIE);
+    const session = sid ? await getSession(sid) : null;
+    if (session?.sub) {
+      const apiUrl = process.env.API_URL || "https://16-112-225-113.sslip.io";
+      const apiKey = process.env.API_SHARED_SECRET;
+      const lastUserMsg = [...data.messages].reverse().find((m) => m.role === "user");
+      try {
+        const res = await fetch(`${apiUrl}/v1/coach/log`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Api-Key": apiKey ?? "",
+            "X-User-Id": session.sub,
+            "X-User-Email": session.email,
+          },
+          body: JSON.stringify({
+            user_message: lastUserMsg?.content ?? "",
+            reply,
+            container_tag: session.sub,
+            session_id: data.session_id || null,
+          }),
+        });
+        if (!res.ok) {
+          const text = await res.text().catch(() => "?");
+          console.error("coach log fail:", res.status, text);
+        }
+      } catch (e: unknown) {
+        console.error("coach log error:", e instanceof Error ? e.message : String(e));
+      }
+    }
+
     return { reply };
   });
