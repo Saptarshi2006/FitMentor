@@ -104,26 +104,6 @@ export const exchangeDiscordCode = createServerFn({ method: "POST" })
 
     const sub = `discord:${discordUser.id}`;
     const email = discordUser.email || `${discordUser.username}@discord`;
-    const apiUrl = process.env.API_URL || "https://16-112-132-239.sslip.io";
-    const apiKey = process.env.API_SHARED_SECRET || "";
-
-    if (state === "signup" && apiKey) {
-      try {
-        const existRes = await fetch(`${apiUrl}/v1/user/exists`, {
-          headers: {
-            "X-Api-Key": apiKey,
-            "X-User-Id": sub,
-            "X-User-Email": email,
-          },
-        });
-        const existData = await existRes.json();
-        if (existData.exists) {
-          return { ok: false, error: "user_exists" } as const;
-        }
-      } catch {
-        // API unreachable from this environment — proceed anyway
-      }
-    }
 
     const sid = await createSession({
       sub,
@@ -134,20 +114,6 @@ export const exchangeDiscordCode = createServerFn({ method: "POST" })
     if (!sid) return { ok: false, error: "session_create_failed" } as const;
 
     setSessionCookie(sid);
-
-    if (apiKey && apiUrl) {
-      try {
-        await fetch(`${apiUrl}/v1/user/me`, {
-          headers: {
-            "X-Api-Key": apiKey,
-            "X-User-Id": sub,
-            "X-User-Email": email,
-          },
-        });
-      } catch (e) {
-        console.error("Failed to create user in API:", e);
-      }
-    }
 
     return {
       ok: true,
