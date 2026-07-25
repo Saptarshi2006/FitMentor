@@ -1,15 +1,4 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: fitmentor
-      POSTGRES_PASSWORD: fitmentor
-      POSTGRES_DB: fitmentor
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-
   redis:
     image: redis:7-alpine
     ports:
@@ -45,7 +34,6 @@ services:
     ports:
       - "3000:3000"
     environment:
-      DATABASE_URL: postgres://fitmentor:fitmentor@postgres:5432/fitmentor
       REDIS_URL: redis://redis:6379
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
       KAFKA_BROKERS: kafka:9092
@@ -63,7 +51,6 @@ services:
       POLAR_PRO_PRICE_ID: ${POLAR_PRO_PRICE_ID:-}
       PLANNER_URL: ${PLANNER_URL:-http://planner:8002}
     depends_on:
-      - postgres
       - redis
 
   ws:
@@ -109,7 +96,6 @@ services:
       - tbdata:/data
 
 volumes:
-  pgdata:
   rabbitmqdata:
   kafkadata:
   tbdata:
