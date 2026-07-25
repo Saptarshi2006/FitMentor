@@ -18,6 +18,10 @@ impl GqlContext {
         }
     }
 
+    pub fn pool_for_user(&self) -> &PgPool {
+        &self.pool
+    }
+
     pub fn require_user(&self) -> Result<&AuthUser, async_graphql::Error> {
         self.user
             .as_ref()
