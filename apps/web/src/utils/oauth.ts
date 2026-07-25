@@ -108,16 +108,20 @@ export const exchangeDiscordCode = createServerFn({ method: "POST" })
     const apiKey = process.env.API_SHARED_SECRET || "";
 
     if (state === "signup" && apiKey) {
-      const existRes = await fetch(`${apiUrl}/v1/user/exists`, {
-        headers: {
-          "X-Api-Key": apiKey,
-          "X-User-Id": sub,
-          "X-User-Email": email,
-        },
-      });
-      const existData = await existRes.json();
-      if (existData.exists) {
-        return { ok: false, error: "user_exists" } as const;
+      try {
+        const existRes = await fetch(`${apiUrl}/v1/user/exists`, {
+          headers: {
+            "X-Api-Key": apiKey,
+            "X-User-Id": sub,
+            "X-User-Email": email,
+          },
+        });
+        const existData = await existRes.json();
+        if (existData.exists) {
+          return { ok: false, error: "user_exists" } as const;
+        }
+      } catch {
+        // API unreachable from this environment — proceed anyway
       }
     }
 

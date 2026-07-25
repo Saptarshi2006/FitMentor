@@ -62,9 +62,19 @@ async fn extract_auth_user(
             if let Some(sid) = part.strip_prefix("fitmentor_session=") {
                 if let Some(data) = state.cache.get(&format!("session:{}", sid)).await {
                     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&data) {
-                        let user_id = json["cf_sub"].as_str().unwrap_or("").to_string();
+                        let user_id = json["sub"].or_else(|| json["cf_sub"]).and_then(|v| v.as_str().map(String::from)).unwrap_or_default();
                         let email = json["email"].as_str().unwrap_or("").to_string();
+                        let name = json["name"].as_str().unwrap_or("").to_string();
                         if !user_id.is_empty() {
+                            // Auto-create user on first visit
+                            let _ = sqlx::query(
+                                "INSERT INTO users (cf_access_sub, email, name) VALUES ($1, $2, $3) ON CONFLICT (cf_access_sub) DO UPDATE SET email = EXCLUDED.email, name = COALESCE(EXCLUDED.name, users.name), updated_at = now()"
+                            )
+                            .bind(&user_id)
+                            .bind(&email)
+                            .bind(&name)
+                            .execute(&state.pool)
+                            .await;
                             return Some(auth::middleware::AuthUser { user_id, email });
                         }
                     }
