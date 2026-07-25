@@ -60,13 +60,13 @@ async fn extract_auth_user(
         for part in cookie.split(';') {
             let part = part.trim();
             if let Some(sid) = part.strip_prefix("fitmentor_session=") {
+                // Try Redis lookup first
                 if let Some(data) = state.cache.get(&format!("session:{}", sid)).await {
                     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&data) {
                         let user_id = json.get("sub").or_else(|| json.get("cf_sub")).and_then(|v| v.as_str().map(String::from)).unwrap_or_default();
                         let email = json["email"].as_str().unwrap_or("").to_string();
                         let name = json["name"].as_str().unwrap_or("").to_string();
                         if !user_id.is_empty() {
-                            // Auto-create user on first visit
                             let _ = sqlx::query(
                                 "INSERT INTO users (cf_access_sub, email, name) VALUES ($1, $2, $3) ON CONFLICT (cf_access_sub) DO UPDATE SET email = EXCLUDED.email, name = COALESCE(EXCLUDED.name, users.name), updated_at = now()"
                             )
@@ -76,6 +76,48 @@ async fn extract_auth_user(
                             .execute(&state.pool)
                             .await;
                             return Some(auth::middleware::AuthUser { user_id, email });
+                        }
+                    }
+                }
+                // Fallback: validate via Workers KV session bridge
+                if !state.app_url.is_empty() {
+                    if let Ok(client) = reqwest::Client::builder()
+                        .timeout(std::time::Duration::from_secs(5))
+                        .build()
+                    {
+                        let validation_url = format!("{}/api/validate-session", state.app_url);
+                        if let Ok(resp) = client
+                            .get(&validation_url)
+                            .header("cookie", format!("fitmentor_session={}", sid))
+                            .send()
+                            .await
+                        {
+                            if resp.status().is_success() {
+                                if let Ok(json) = resp.json::<serde_json::Value>().await {
+                                    let user_id = json.get("sub").and_then(|v| v.as_str().map(String::from)).unwrap_or_default();
+                                    let email = json["email"].as_str().unwrap_or("").to_string();
+                                    let name = json["name"].as_str().unwrap_or("").to_string();
+                                    if !user_id.is_empty() {
+                                        let session_data = serde_json::json!({
+                                            "sub": user_id,
+                                            "cf_sub": user_id,
+                                            "email": email,
+                                            "name": name,
+                                            "iat": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis(),
+                                        });
+                                        state.cache.set(&format!("session:{}", sid), &session_data.to_string(), 604800).await;
+                                        let _ = sqlx::query(
+                                            "INSERT INTO users (cf_access_sub, email, name) VALUES ($1, $2, $3) ON CONFLICT (cf_access_sub) DO UPDATE SET email = EXCLUDED.email, name = COALESCE(EXCLUDED.name, users.name), updated_at = now()"
+                                        )
+                                        .bind(&user_id)
+                                        .bind(&email)
+                                        .bind(&name)
+                                        .execute(&state.pool)
+                                        .await;
+                                        return Some(auth::middleware::AuthUser { user_id, email });
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -98,6 +140,7 @@ pub struct AppState {
     pub polar_pro_price_id: String,
     pub api_shared_secret: String,
     pub planner_url: String,
+    pub app_url: String,
 }
 
 async fn run_migrations(pool: &PgPool) {
@@ -258,6 +301,7 @@ async fn main() {
         polar_pro_price_id: config.polar_pro_price_id,
         api_shared_secret: config.api_shared_secret,
         planner_url: config.planner_url,
+        app_url: config.app_url,
     };
 
     let origin = config.cors_origin.parse::<header::HeaderValue>().expect("invalid cors_origin");

@@ -176,6 +176,33 @@ async function handleFormGet(request: Request): Promise<Response> {
   return proxyGetAdvice(request, "/v1/tools/form-advice");
 }
 
+async function handleValidateSession(request: Request): Promise<Response> {
+  try {
+    const env = getCloudflareEnv(request);
+    const kv = env?.fitmentor_sessions;
+    if (!kv) return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
+
+    const raw = parseCookie(request.headers.get("cookie"), "fitmentor_session");
+    if (!raw) return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
+
+    const key = await deriveKey(raw);
+    const data = await kv.get(key);
+    if (!data) return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
+
+    const session = JSON.parse(data);
+    return new Response(JSON.stringify({
+      sub: session.sub,
+      email: session.email,
+      name: session.name,
+    }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  } catch {
+    return new Response("{}", { status: 500, headers: { "content-type": "application/json" } });
+  }
+}
+
 async function handleCheckout(request: Request): Promise<Response> {
   try {
     const env = getCloudflareEnv(request);
@@ -232,7 +259,9 @@ export default {
       if (url.pathname === "/api/checkout" && request.method === "POST") {
         return await handleCheckout(request);
       }
-
+      if (url.pathname === "/api/validate-session" && request.method === "GET") {
+        return await handleValidateSession(request);
+      }
 
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
