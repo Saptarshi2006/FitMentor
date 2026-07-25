@@ -177,31 +177,25 @@ async fn process_subscription_event(
         .unwrap_or("");
 
     if user_id_str.is_empty() {
-        // Try to find user by email — search all shards
         let email = data["user_email"].as_str().unwrap_or("");
         if !email.is_empty() {
-            for i in 0..state.shard_router.shard_count() {
-                let pool = state.shard_router.primary_pool(); // Use shard router to get pool
-                let user_uuid: Option<uuid::Uuid> = sqlx::query_scalar(
-                    "SELECT id FROM users WHERE email = $1",
-                )
-                .bind(email)
-                .fetch_optional(pool)
-                .await?;
-                if let Some(uuid) = user_uuid {
-                    upsert_subscription(state, uuid, polar_sub_id, product_id, price_id, tier, status, current_period_start, current_period_end, cancel_at_period_end).await?;
-                    return Ok(());
-                }
+            let user_uuid: Option<uuid::Uuid> = sqlx::query_scalar(
+                "SELECT id FROM users WHERE email = $1",
+            )
+            .bind(email)
+            .fetch_optional(&state.pool)
+            .await?;
+            if let Some(uuid) = user_uuid {
+                upsert_subscription(state, uuid, polar_sub_id, product_id, price_id, tier, status, current_period_start, current_period_end, cancel_at_period_end).await?;
+                return Ok(());
             }
         }
     } else {
-        // user_id is cf_access_sub format — use shard router to find correct shard
-        let pool = state.shard_router.get_pool_for_user(user_id_str);
         let user_uuid: Option<uuid::Uuid> = sqlx::query_scalar(
             "SELECT id FROM users WHERE cf_access_sub = $1",
         )
         .bind(user_id_str)
-        .fetch_optional(pool)
+        .fetch_optional(&state.pool)
         .await?;
         if let Some(uuid) = user_uuid {
             upsert_subscription(state, uuid, polar_sub_id, product_id, price_id, tier, status, current_period_start, current_period_end, cancel_at_period_end).await?;
@@ -223,58 +217,52 @@ async fn upsert_subscription(
     current_period_end: &str,
     cancel_at_period_end: bool,
 ) -> Result<(), AppError> {
-    // We need to find which shard has this user — use the user_id UUID as a proxy
-    // Since we don't have cf_access_sub here, we'll search shards
-    for i in 0..state.shard_router.shard_count() {
-        let pool = state.shard_router.primary_pool();
-        let existing = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM subscriptions WHERE user_id = $1)",
+    let pool = &state.pool;
+    let existing = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM subscriptions WHERE user_id = $1)",
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await?;
+
+    if existing {
+        sqlx::query(
+            "UPDATE subscriptions SET
+                polar_sub_id = $2, polar_product_id = $3, polar_price_id = $4,
+                tier = $5, status = $6,
+                current_period_start = $7::timestamptz, current_period_end = $8::timestamptz,
+                cancel_at_period_end = $9, updated_at = now()
+             WHERE user_id = $1",
         )
         .bind(user_id)
-        .fetch_one(pool)
+        .bind(polar_sub_id)
+        .bind(product_id)
+        .bind(price_id)
+        .bind(tier)
+        .bind(status)
+        .bind(current_period_start)
+        .bind(current_period_end)
+        .bind(cancel_at_period_end)
+        .execute(pool)
         .await?;
-
-        if existing {
-            sqlx::query(
-                "UPDATE subscriptions SET
-                    polar_sub_id = $2, polar_product_id = $3, polar_price_id = $4,
-                    tier = $5, status = $6,
-                    current_period_start = $7::timestamptz, current_period_end = $8::timestamptz,
-                    cancel_at_period_end = $9, updated_at = now()
-                 WHERE user_id = $1",
-            )
-            .bind(user_id)
-            .bind(polar_sub_id)
-            .bind(product_id)
-            .bind(price_id)
-            .bind(tier)
-            .bind(status)
-            .bind(current_period_start)
-            .bind(current_period_end)
-            .bind(cancel_at_period_end)
-            .execute(pool)
-            .await?;
-            return Ok(());
-        } else {
-            sqlx::query(
-                "INSERT INTO subscriptions
-                    (user_id, polar_sub_id, polar_product_id, polar_price_id, tier, status,
-                     current_period_start, current_period_end, cancel_at_period_end)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7::timestamptz, $8::timestamptz, $9)",
-            )
-            .bind(user_id)
-            .bind(polar_sub_id)
-            .bind(product_id)
-            .bind(price_id)
-            .bind(tier)
-            .bind(status)
-            .bind(current_period_start)
-            .bind(current_period_end)
-            .bind(cancel_at_period_end)
-            .execute(pool)
-            .await?;
-            return Ok(());
-        }
+    } else {
+        sqlx::query(
+            "INSERT INTO subscriptions
+                (user_id, polar_sub_id, polar_product_id, polar_price_id, tier, status,
+                 current_period_start, current_period_end, cancel_at_period_end)
+             VALUES ($1, $2, $3, $4, $5, $6, $7::timestamptz, $8::timestamptz, $9)",
+        )
+        .bind(user_id)
+        .bind(polar_sub_id)
+        .bind(product_id)
+        .bind(price_id)
+        .bind(tier)
+        .bind(status)
+        .bind(current_period_start)
+        .bind(current_period_end)
+        .bind(cancel_at_period_end)
+        .execute(pool)
+        .await?;
     }
 
     Ok(())
@@ -289,20 +277,16 @@ async fn update_subscription_status(
     let polar_sub_id = data["id"].as_str().unwrap_or("");
 
     if !polar_sub_id.is_empty() {
-        // Search all shards for this subscription
-        for i in 0..state.shard_router.shard_count() {
-            let pool = state.shard_router.primary_pool();
-            let result = sqlx::query(
-                "UPDATE subscriptions SET status = $2, updated_at = now() WHERE polar_sub_id = $1",
-            )
-            .bind(polar_sub_id)
-            .bind(status)
-            .execute(pool)
-            .await?;
+        let result = sqlx::query(
+            "UPDATE subscriptions SET status = $2, updated_at = now() WHERE polar_sub_id = $1",
+        )
+        .bind(polar_sub_id)
+        .bind(status)
+        .execute(&state.pool)
+        .await?;
 
-            if result.rows_affected() > 0 {
-                return Ok(());
-            }
+        if result.rows_affected() > 0 {
+            return Ok(());
         }
     }
 
@@ -320,25 +304,21 @@ async fn update_subscription_period(
     let cancel_at_period_end = data["cancel_at_period_end"].as_bool().unwrap_or(false);
 
     if !polar_sub_id.is_empty() {
-        // Search all shards for this subscription
-        for i in 0..state.shard_router.shard_count() {
-            let pool = state.shard_router.primary_pool();
-            let result = sqlx::query(
-                "UPDATE subscriptions SET
-                    current_period_start = $2::timestamptz, current_period_end = $3::timestamptz,
-                    cancel_at_period_end = $4, updated_at = now()
-                 WHERE polar_sub_id = $1",
-            )
-            .bind(polar_sub_id)
-            .bind(current_period_start)
-            .bind(current_period_end)
-            .bind(cancel_at_period_end)
-            .execute(pool)
-            .await?;
+        let result = sqlx::query(
+            "UPDATE subscriptions SET
+                current_period_start = $2::timestamptz, current_period_end = $3::timestamptz,
+                cancel_at_period_end = $4, updated_at = now()
+             WHERE polar_sub_id = $1",
+        )
+        .bind(polar_sub_id)
+        .bind(current_period_start)
+        .bind(current_period_end)
+        .bind(cancel_at_period_end)
+        .execute(&state.pool)
+        .await?;
 
-            if result.rows_affected() > 0 {
-                return Ok(());
-            }
+        if result.rows_affected() > 0 {
+            return Ok(());
         }
     }
 

@@ -12,11 +12,8 @@ use axum::http::header;
 use axum::http::Method;
 use axum::Router;
 use config::Config;
-use db::shard::ShardRouter;
-<<<<<<< Updated upstream
 use graphql::schema::create_schema;
-=======
->>>>>>> Stashed changes
+use sqlx::PgPool;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::EnvFilter;
@@ -24,9 +21,7 @@ use tracing_subscriber::EnvFilter;
 use crate::services::cache::CacheService;
 
 async fn graphiql() -> impl axum::response::IntoResponse {
-    axum::response::Html(async_graphql::http::GraphiQLSource::build()
-        .endpoint("/graphql")
-        .finish())
+    axum::response::Html(async_graphql::http::GraphiQLSource::build().endpoint("/graphql").finish())
 }
 
 async fn graphql_handler(
@@ -35,15 +30,8 @@ async fn graphql_handler(
     req: async_graphql_axum::GraphQLRequest,
 ) -> async_graphql_axum::GraphQLResponse {
     let schema = create_schema();
-
-    // Extract auth user from headers
     let user = extract_auth_user(&state, &headers).await;
-
-    let gql_ctx = graphql::context::GqlContext::new(
-        state.shard_router.clone(),
-        state.cache.clone(),
-        user,
-    );
+    let gql_ctx = graphql::context::GqlContext::new(&state, user);
     schema.execute(req.into_inner().data(gql_ctx)).await.into()
 }
 
@@ -51,43 +39,23 @@ async fn extract_auth_user(
     state: &AppState,
     headers: &axum::http::HeaderMap,
 ) -> Option<auth::middleware::AuthUser> {
-    // Try API key auth first
     if !state.api_shared_secret.is_empty() {
         if let Some(api_key) = headers.get("x-api-key").and_then(|v| v.to_str().ok()) {
             if api_key == state.api_shared_secret {
-                let user_id = headers
-                    .get("x-user-id")
-                    .and_then(|v| v.to_str().ok())
-                    .unwrap_or("")
-                    .to_string();
-                let email = headers
-                    .get("x-user-email")
-                    .and_then(|v| v.to_str().ok())
-                    .unwrap_or("")
-                    .to_string();
+                let user_id = headers.get("x-user-id").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+                let email = headers.get("x-user-email").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
                 return Some(auth::middleware::AuthUser { user_id, email });
             }
         }
     }
-
-    // Try JWT auth
-    let token = headers
-        .get("cf-access-jwt-assertion")
-        .or_else(|| headers.get("authorization"))
-        .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.strip_prefix("Bearer ").or(Some(s)))?;
-
+    let token = headers.get("cf-access-jwt-assertion").or_else(|| headers.get("authorization")).and_then(|v| v.to_str().ok()).and_then(|s| s.strip_prefix("Bearer ").or(Some(s)))?;
     let claims: auth::jwt::Claims = state.jwt_validator.validate(token).await.ok()?;
-
-    Some(auth::middleware::AuthUser {
-        user_id: claims.sub,
-        email: claims.email,
-    })
+    Some(auth::middleware::AuthUser { user_id: claims.sub, email: claims.email })
 }
 
 #[derive(Clone)]
 pub struct AppState {
-    pub shard_router: Arc<ShardRouter>,
+    pub pool: PgPool,
     pub cache: CacheService,
     pub jwt_validator: Arc<JwtValidator>,
     pub polar_access_token: String,
@@ -100,7 +68,7 @@ pub struct AppState {
     pub planner_url: String,
 }
 
-async fn run_migrations(pool: &sqlx::PgPool) {
+async fn run_migrations(pool: &PgPool) {
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS meal_plans (
@@ -233,19 +201,11 @@ async fn main() {
 
     let config = Config::from_env();
 
-    // Initialize shard router: use DATABASE_SHARD_URLS if set, otherwise fall back to DATABASE_URL
-    let shard_urls = if config.database_shard_urls.is_empty() {
-        vec![config.database_url.clone()]
-    } else {
-        config.database_shard_urls.clone()
-    };
-
-    let shard_router = db::create_shard_router(&shard_urls)
+    let pool = db::create_pool(&config.database_url)
         .await
-        .expect("failed to create shard router");
+        .expect("failed to connect to database");
 
-    // Run migrations on primary shard
-    run_migrations(shard_router.primary_pool()).await;
+    run_migrations(&pool).await;
 
     let cache = services::cache::CacheService::new(&config.redis_url).await;
 
@@ -255,7 +215,7 @@ async fn main() {
     ));
 
     let state = AppState {
-        shard_router: Arc::new(shard_router),
+        pool,
         cache,
         jwt_validator,
         polar_access_token: config.polar_access_token,
@@ -287,21 +247,10 @@ async fn main() {
             "x-user-email".parse().unwrap(),
         ]);
 
-<<<<<<< Updated upstream
-    let graphql_routes = Router::new()
-        .route(
-            "/graphql",
-            axum::routing::get(graphiql).post(graphql_handler),
-        );
-
     let app = routes::routes()
-        .merge(graphql_routes)
+        .merge(Router::new().route("/graphql", axum::routing::get(graphiql).post(graphql_handler)))
         .layer(cors)
         .with_state(state);
-=======
-    // routes() takes AppState and returns Router (already has .with_state)
-    let app = routes::routes(state).layer(cors);
->>>>>>> Stashed changes
 
     let addr = format!("0.0.0.0:{}", config.port);
     let listener = tokio::net::TcpListener::bind(&addr)

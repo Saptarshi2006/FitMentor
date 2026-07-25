@@ -1,9 +1,6 @@
 #[allow(dead_code)]
 pub struct Config {
     pub database_url: String,
-    /// Comma-separated list of database shard URLs for sharding.
-    /// If empty, falls back to single `database_url`.
-    pub database_shard_urls: Vec<String>,
     pub redis_url: String,
     pub cf_access_team_domain: String,
     pub cf_access_aud: String,
@@ -23,16 +20,8 @@ pub struct Config {
 
 impl Config {
     pub fn from_env() -> Self {
-        let database_shard_urls: Vec<String> = std::env::var("DATABASE_SHARD_URLS")
-            .unwrap_or_default()
-            .split(',')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect();
-
         Self {
             database_url: std::env::var("DATABASE_URL").expect("DATABASE_URL must be set"),
-            database_shard_urls,
             redis_url: std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".into()),
             cf_access_team_domain: std::env::var("CF_ACCESS_TEAM_DOMAIN")
                 .unwrap_or_else(|_| "your-team.cloudflareaccess.com".into()),

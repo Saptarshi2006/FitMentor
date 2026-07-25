@@ -2,7 +2,6 @@ const KEY = "fitmentor.subscription.v1";
 
 export type { PlanTier, Subscription } from "@fitmentor/shared";
 import type { PlanTier, Subscription } from "@fitmentor/shared";
-import { syncSubscription } from "@/services/sync.server";
 
 export function loadSubscription(): Subscription | null {
   if (typeof window === "undefined") return null;
@@ -16,14 +15,6 @@ export function loadSubscription(): Subscription | null {
 export function saveSubscription(sub: Subscription) {
   localStorage.setItem(KEY, JSON.stringify(sub));
   window.dispatchEvent(new Event("fitmentor:subscription"));
-
-  // Sync to API (fire-and-forget)
-  syncSubscription({
-    data: {
-      tier: sub.tier,
-      status: "active",
-    },
-  }).catch(() => {});
 }
 
 export function clearSubscription() {

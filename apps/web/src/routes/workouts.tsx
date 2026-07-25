@@ -1,11 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
 import { MobileShell } from "@/components/MobileShell";
 import { useProfile } from "@/utils/profile";
 import { EXERCISE_LIBRARY, type WorkoutDay } from "@/utils/workouts";
 import { saveLog, ensureToday } from "@/utils/habits";
-import { syncWorkoutComplete, fetchWorkoutCompletions } from "@/services/sync.server";
 import { Button } from "@/components/ui/button";
 import { Check, ChevronRight, Clock, Dumbbell, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -23,19 +21,12 @@ function Workouts() {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(false);
   const [openIdx, setOpenIdx] = useState<number | null>(0);
-  const [completedDays, setCompletedDays] = useState<Set<number>>(new Set());
   const { profile } = useProfile();
-  const getCompletions = useServerFn(fetchWorkoutCompletions);
 
   useEffect(() => {
     setFetchError(false);
     if (!profile) { setLoading(false); return; }
     setLoading(true);
-<<<<<<< Updated upstream
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20000);
-=======
->>>>>>> Stashed changes
     getClient()
       .request<{ todayAiPlan: { plan: WorkoutDay[] } | null }>(TODAY_AI_PLAN_QUERY, { table: "workout_plans" })
       .then((data) => {
@@ -45,15 +36,6 @@ function Workouts() {
       .catch(() => setFetchError(true))
       .finally(() => setLoading(false));
   }, [profile]);
-
-  useEffect(() => {
-    getCompletions()
-      .then((json: any) => {
-        const items = json?.data?.completions ?? [];
-        setCompletedDays(new Set(items.map((c: any) => c.day_index)));
-      })
-      .catch(() => {});
-  }, []);
 
   return (
     <MobileShell>
@@ -125,24 +107,16 @@ function Workouts() {
                       {ex.alt && <p className="mt-1 text-xs text-muted-foreground">↔ Alt: {ex.alt}</p>}
                     </div>
                   ))}
-                  {completedDays.has(i) ? (
-                    <div className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500/20 py-3 text-sm font-semibold text-emerald-400">
-                      <Check className="h-4 w-4" /> Completed
-                    </div>
-                  ) : (
-                    <Button
-                      className="mt-2 w-full bg-gradient-hero text-primary-foreground shadow-glow h-12 text-base font-semibold"
-                      onClick={() => {
-                        const log = ensureToday();
-                        saveLog({ ...log, workoutDone: true });
-                        syncWorkoutComplete({ data: { day_index: i, title: day.title } }).catch(() => {});
-                        setCompletedDays((prev) => new Set(prev).add(i));
-                        toast.success("Workout logged!");
-                      }}
-                    >
-                      <Check className="mr-2 h-4 w-4" /> Mark complete
-                    </Button>
-                  )}
+                  <Button
+                    className="mt-2 w-full bg-gradient-hero text-primary-foreground shadow-glow h-12 text-base font-semibold"
+                    onClick={() => {
+                      const log = ensureToday();
+                      saveLog({ ...log, workoutDone: true });
+                      toast.success("Workout logged!");
+                    }}
+                  >
+                    <Check className="mr-2 h-4 w-4" /> Mark complete
+                  </Button>
                 </div>
               )}
             </div>

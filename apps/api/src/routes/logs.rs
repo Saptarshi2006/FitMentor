@@ -31,8 +31,7 @@ pub async fn get_today(
     auth: AuthUser,
     State(state): State<AppState>,
 ) -> Result<Response, AppError> {
-    let pool = state.shard_router.get_pool_for_user(&auth.user_id);
-    let user = get_user_id(pool, &auth.user_id).await?;
+    let user = get_user_id(&state.pool, &auth.user_id).await?;
 
     let cache_key = format!("cache:today:{}", user.id);
     if let Some(cached) = state.cache.get(&cache_key).await {
@@ -50,7 +49,7 @@ pub async fn get_today(
     )
     .bind(user.id)
     .bind(today)
-    .fetch_optional(pool)
+    .fetch_optional(&state.pool)
     .await?;
 
     let response = serde_json::json!({ "data": { "log": log } });
@@ -64,8 +63,7 @@ pub async fn upsert_today(
     State(state): State<AppState>,
     AxumJson(input): AxumJson<UpdateDailyLog>,
 ) -> Result<Response, AppError> {
-    let pool = state.shard_router.get_pool_for_user(&auth.user_id);
-    let user = get_user_id(pool, &auth.user_id).await?;
+    let user = get_user_id(&state.pool, &auth.user_id).await?;
     let today = Utc::now().date_naive();
 
     let log = sqlx::query_as::<_, DailyLog>(
@@ -85,12 +83,12 @@ pub async fn upsert_today(
     .bind(user.id)
     .bind(today)
     .bind(input.water.unwrap_or(0))
-    .bind(input.sleep.unwrap_or(0))
+    .bind(input.sleep.unwrap_or(0.0))
     .bind(input.steps.unwrap_or(0))
-    .bind(input.protein_g.unwrap_or(0))
+    .bind(input.protein_g.unwrap_or(0.0))
     .bind(input.workout_done.unwrap_or(false))
     .bind(input.weight_kg)
-    .fetch_one(pool)
+    .fetch_one(&state.pool)
     .await?;
 
     state.cache.invalidate_today(&user.id.to_string()).await;
@@ -105,8 +103,7 @@ pub async fn get_range(
     State(state): State<AppState>,
     Query(query): Query<DateRangeQuery>,
 ) -> Result<Response, AppError> {
-    let pool = state.shard_router.get_pool_for_user(&auth.user_id);
-    let user = get_user_id(pool, &auth.user_id).await?;
+    let user = get_user_id(&state.pool, &auth.user_id).await?;
 
     let logs = sqlx::query_as::<_, DailyLog>(
         r#"SELECT id, user_id, date, water, sleep, steps, protein_g, workout_done, weight_kg,
@@ -118,7 +115,7 @@ pub async fn get_range(
     .bind(user.id)
     .bind(query.from)
     .bind(query.to)
-    .fetch_all(pool)
+    .fetch_all(&state.pool)
     .await?;
 
     let response = serde_json::json!({ "data": { "logs": logs } });
@@ -141,8 +138,7 @@ pub async fn get_streak(
         }
     }
 
-    let pool = state.shard_router.get_pool_for_user(&auth.user_id);
-    let user = get_user_id(pool, &auth.user_id).await?;
+    let user = get_user_id(&state.pool, &auth.user_id).await?;
 
     let rows = sqlx::query_as::<_, DateRow>(
         r#"SELECT date FROM daily_logs
@@ -151,7 +147,7 @@ pub async fn get_streak(
            LIMIT 100"#,
     )
     .bind(user.id)
-    .fetch_all(pool)
+    .fetch_all(&state.pool)
     .await?;
 
     let mut streak: i32 = 0;

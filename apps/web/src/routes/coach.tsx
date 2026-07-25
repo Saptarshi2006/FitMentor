@@ -10,19 +10,8 @@ import { Sparkles, Send, Menu, Plus, Trash2, History, MessageSquare } from "luci
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import { getClient } from "@/lib/graphql/client";
-<<<<<<< Updated upstream
-import {
-  COACH_SESSIONS_QUERY,
-  COACH_SESSION_QUERY,
-} from "@/lib/graphql/queries";
-import {
-  CREATE_COACH_SESSION_MUTATION,
-  DELETE_COACH_SESSION_MUTATION,
-} from "@/lib/graphql/mutations";
-=======
 import { COACH_SESSIONS_QUERY, COACH_SESSION_QUERY } from "@/lib/graphql/queries";
 import { CREATE_COACH_SESSION_MUTATION, DELETE_COACH_SESSION_MUTATION } from "@/lib/graphql/mutations";
->>>>>>> Stashed changes
 
 export const Route = createFileRoute("/coach")({
   head: () => ({ meta: [{ title: "AI Coach — FitMentor" }] }),
@@ -78,14 +67,7 @@ function Coach() {
   async function switchSession(id: string) {
     try {
       const client = getClient();
-<<<<<<< Updated upstream
-      const data = await client.request<{ coachSession: { messages: Array<{ role: string; content: string }> } | null }>(
-        COACH_SESSION_QUERY,
-        { id },
-      );
-=======
       const data = await client.request<{ coachSession: { messages: Array<{ role: string; content: string }> } | null }>(COACH_SESSION_QUERY, { id });
->>>>>>> Stashed changes
       const full = data.coachSession;
       if (!full) {
         toast.error("Could not load session");
@@ -215,7 +197,7 @@ function Coach() {
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-medium">{s.title}</p>
                         <p className="text-xs text-muted-foreground">
-                          {s.title} · {s.messageCount} messages
+                          {s.messageCount} messages
                         </p>
                       </div>
                       <button

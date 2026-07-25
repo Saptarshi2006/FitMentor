@@ -6,6 +6,8 @@ import { loadLogs, saveLog, todayKey, last7, type DailyLog } from "@/utils/habit
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/utils/cn";
+import { getClient } from "@/lib/graphql/client";
+import { TODAY_AI_PLAN_QUERY } from "@/lib/graphql/queries";
 import {
   Scale,
   Moon,

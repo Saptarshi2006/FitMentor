@@ -52,16 +52,8 @@ function Nutrition() {
     setLoadingPlan(true);
     try {
       const client = getClient();
-<<<<<<< Updated upstream
-      const data = await client.request<{ todayAiPlan: { plan: unknown } | null }>(
-        TODAY_AI_PLAN_QUERY,
-        { table: "meal_plans" },
-      );
-      const raw = data?.todayAiPlan?.plan;
-=======
       const data = await client.request<{ todayAiPlan: { plan: unknown } | null }>(TODAY_AI_PLAN_QUERY, { table: "meal_plans" });
       const raw = data.todayAiPlan?.plan;
->>>>>>> Stashed changes
       const arr = Array.isArray(raw) ? raw : raw ? [raw] : [];
       if (arr.length > 0) setAiPlans(arr as MealPlan[]);
     } catch (e) {

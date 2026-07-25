@@ -1,7 +1,6 @@
 use axum::extract::{State, Json as AxumJson};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use serde::Deserialize;
 
 use crate::auth::middleware::AuthUser;
 use crate::error::AppError;
@@ -60,8 +59,7 @@ pub async fn get_me(
     auth: AuthUser,
     State(state): State<AppState>,
 ) -> Result<Response, AppError> {
-    let pool = state.shard_router.get_pool_for_user(&auth.user_id);
-    let user = upsert_user(pool, &auth.user_id, &auth.email).await?;
+    let user = upsert_user(&state.pool, &auth.user_id, &auth.email).await?;
 
     let cache_key = format!("cache:user:{}", user.id);
     if let Some(cached) = state.cache.get(&cache_key).await {
@@ -74,7 +72,7 @@ pub async fn get_me(
         r#"INSERT INTO profiles (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING"#,
     )
     .bind(user.id)
-    .execute(pool)
+    .execute(&state.pool)
     .await;
 
     let profile = sqlx::query_as::<_, Profile>(
@@ -84,7 +82,7 @@ pub async fn get_me(
            FROM profiles WHERE user_id = $1"#,
     )
     .bind(user.id)
-    .fetch_optional(pool)
+    .fetch_optional(&state.pool)
     .await?;
 
     let response = serde_json::json!({
@@ -109,8 +107,7 @@ pub async fn check_user_exists(
     auth: AuthUser,
     State(state): State<AppState>,
 ) -> Result<Response, AppError> {
-    let pool = state.shard_router.get_pool_for_user(&auth.user_id);
-    let exists = get_user_by_cf_sub(pool, &auth.user_id).await.is_ok();
+    let exists = get_user_by_cf_sub(&state.pool, &auth.user_id).await.is_ok();
     Ok((StatusCode::OK, AxumJson(serde_json::json!({ "exists": exists }))).into_response())
 }
 
@@ -119,8 +116,7 @@ pub async fn update_profile(
     State(state): State<AppState>,
     AxumJson(input): AxumJson<UpdateProfile>,
 ) -> Result<Response, AppError> {
-    let pool = state.shard_router.get_pool_for_user(&auth.user_id);
-    let user = get_user_by_cf_sub(pool, &auth.user_id).await?;
+    let user = get_user_by_cf_sub(&state.pool, &auth.user_id).await?;
 
     let profile = sqlx::query_as::<_, Profile>(
         r#"UPDATE profiles SET
@@ -155,12 +151,13 @@ pub async fn update_profile(
     .bind(input.days_per_week)
     .bind(input.budget_per_day.map(|v| v as i16))
     .bind(&input.health_conditions)
-    .fetch_one(pool)
+    .fetch_one(&state.pool)
     .await?;
 
     state.cache.invalidate_user(&user.id.to_string()).await;
     state.cache.delete(&format!("cache:user:{}", auth.user_id)).await;
 
+    // Trigger daily-planner to generate plans for this user (fire-and-forget)
     let planner_url = state.planner_url.clone();
     let user_id = auth.user_id.clone();
     tokio::spawn(async move {
@@ -195,8 +192,7 @@ pub async fn update_protein_target(
     State(state): State<AppState>,
     AxumJson(input): AxumJson<ProteinTarget>,
 ) -> Result<Response, AppError> {
-    let pool = state.shard_router.get_pool_for_user(&auth.user_id);
-    let user = get_user_by_cf_sub(pool, &auth.user_id).await?;
+    let user = get_user_by_cf_sub(&state.pool, &auth.user_id).await?;
 
     sqlx::query(
         r#"UPDATE profiles SET custom_protein_g = $2, updated_at = now()
@@ -204,7 +200,7 @@ pub async fn update_protein_target(
     )
     .bind(user.id)
     .bind(input.protein_g)
-    .execute(pool)
+    .execute(&state.pool)
     .await?;
 
     state.cache.invalidate_user(&user.id.to_string()).await;
@@ -218,87 +214,6 @@ pub async fn update_protein_target(
                 "name": user.name,
                 "created_at": user.created_at
             }
-        }
-    });
-
-    Ok((StatusCode::OK, AxumJson(response)).into_response())
-}
-
-#[derive(Deserialize)]
-pub struct SubscriptionInput {
-    pub tier: String,
-    pub status: Option<String>,
-}
-
-pub async fn upsert_subscription(
-    auth: AuthUser,
-    State(state): State<AppState>,
-    AxumJson(input): AxumJson<SubscriptionInput>,
-) -> Result<Response, AppError> {
-    let pool = state.shard_router.get_pool_for_user(&auth.user_id);
-    let user = get_user_by_cf_sub(pool, &auth.user_id).await?;
-    let status = input.status.as_deref().unwrap_or("active");
-
-<<<<<<< Updated upstream
-    // Check if subscription exists
-=======
->>>>>>> Stashed changes
-    let existing = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM subscriptions WHERE user_id = $1)",
-    )
-    .bind(user.id)
-    .fetch_one(pool)
-    .await?;
-
-    if existing {
-        sqlx::query(
-            "UPDATE subscriptions SET tier = $2, status = $3, current_period_start = now(), current_period_end = now() + interval '30 days', updated_at = now() WHERE user_id = $1",
-        )
-        .bind(user.id)
-        .bind(&input.tier)
-        .bind(status)
-        .execute(pool)
-        .await?;
-    } else {
-        sqlx::query(
-            "INSERT INTO subscriptions (user_id, polar_sub_id, polar_product_id, polar_price_id, tier, status, current_period_start, current_period_end) VALUES ($1, 'direct', 'direct', 'direct', $2, $3, now(), now() + interval '30 days')",
-        )
-        .bind(user.id)
-        .bind(&input.tier)
-        .bind(status)
-        .execute(pool)
-        .await?;
-    }
-
-    let response = serde_json::json!({ "ok": true });
-    Ok((StatusCode::OK, AxumJson(response)).into_response())
-}
-
-pub async fn get_subscription(
-    auth: AuthUser,
-    State(state): State<AppState>,
-) -> Result<Response, AppError> {
-    let pool = state.shard_router.get_pool_for_user(&auth.user_id);
-    let user = get_user_by_cf_sub(pool, &auth.user_id).await?;
-
-    let sub = sqlx::query_as::<_, crate::models::user::Subscription>(
-        "SELECT id, user_id, polar_sub_id, tier, status, current_period_start, current_period_end, cancel_at_period_end
-         FROM subscriptions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1",
-    )
-    .bind(user.id)
-    .fetch_optional(pool)
-    .await?;
-
-    let response = serde_json::json!({
-        "data": {
-            "subscription": sub.map(|s| serde_json::json!({
-                "id": s.id,
-                "tier": s.tier,
-                "status": s.status,
-                "currentPeriodStart": s.current_period_start,
-                "currentPeriodEnd": s.current_period_end,
-                "cancelAtPeriodEnd": s.cancel_at_period_end,
-            }))
         }
     });
 

@@ -42,14 +42,13 @@ pub async fn create(
     AuthUser { user_id, .. }: AuthUser,
     Json(req): Json<CreateRequest>,
 ) -> Result<Json<CreateResponse>, crate::error::AppError> {
-    let pool = state.shard_router.get_pool_for_user(&user_id);
     let title = req.title.unwrap_or_else(|| "New Chat".into());
     let id = sqlx::query_scalar::<_, Uuid>(
         "INSERT INTO chat_sessions (user_id, title) VALUES ($1, $2) RETURNING id",
     )
     .bind(&user_id)
     .bind(&title)
-    .fetch_one(pool)
+    .fetch_one(&state.pool)
     .await?;
 
     Ok(Json(CreateResponse { id }))
@@ -60,7 +59,6 @@ pub async fn list(
     State(state): State<AppState>,
     AuthUser { user_id, .. }: AuthUser,
 ) -> Result<Json<Vec<SessionListItem>>, crate::error::AppError> {
-    let pool = state.shard_router.get_pool_for_user(&user_id);
     let rows = sqlx::query_as::<_, SessionRow>(
         "SELECT id, user_id, title, messages, created_at, updated_at
          FROM chat_sessions
@@ -68,7 +66,7 @@ pub async fn list(
          ORDER BY updated_at DESC",
     )
     .bind(&user_id)
-    .fetch_all(pool)
+    .fetch_all(&state.pool)
     .await?;
 
     let items = rows
@@ -97,14 +95,13 @@ pub async fn get(
     AuthUser { user_id, .. }: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<Json<SessionRow>, crate::error::AppError> {
-    let pool = state.shard_router.get_pool_for_user(&user_id);
     let row = sqlx::query_as::<_, SessionRow>(
         "SELECT id, user_id, title, messages, created_at, updated_at
          FROM chat_sessions WHERE id = $1 AND user_id = $2",
     )
     .bind(id)
     .bind(&user_id)
-    .fetch_optional(pool)
+    .fetch_optional(&state.pool)
     .await?
     .ok_or(crate::error::AppError::NotFound)?;
 
@@ -117,11 +114,10 @@ pub async fn delete(
     AuthUser { user_id, .. }: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, crate::error::AppError> {
-    let pool = state.shard_router.get_pool_for_user(&user_id);
     let result = sqlx::query("DELETE FROM chat_sessions WHERE id = $1 AND user_id = $2")
         .bind(id)
         .bind(&user_id)
-        .execute(pool)
+        .execute(&state.pool)
         .await?;
 
     if result.rows_affected() == 0 {
