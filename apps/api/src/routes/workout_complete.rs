@@ -24,21 +24,14 @@ pub async fn complete(
     AuthUser { user_id, .. }: AuthUser,
     Json(req): Json<WorkoutCompleteRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-<<<<<<< Updated upstream
-=======
     let pool = state.shard_router.get_pool_for_user(&user_id);
->>>>>>> Stashed changes
     let today = Utc::now().date_naive();
 
     let uuid: uuid::Uuid = sqlx::query_scalar(
         "SELECT id FROM users WHERE cf_access_sub = $1",
     )
     .bind(&user_id)
-<<<<<<< Updated upstream
-    .fetch_one(&state.pool)
-=======
     .fetch_one(pool)
->>>>>>> Stashed changes
     .await?;
 
     sqlx::query(
@@ -50,11 +43,7 @@ pub async fn complete(
     .bind(today)
     .bind(req.day_index)
     .bind(&req.title)
-<<<<<<< Updated upstream
-    .execute(&state.pool)
-=======
     .execute(pool)
->>>>>>> Stashed changes
     .await?;
 
     Ok(Json(serde_json::json!({"ok": true})))
@@ -65,21 +54,14 @@ pub async fn completions(
     State(state): State<AppState>,
     AuthUser { user_id, .. }: AuthUser,
 ) -> Result<Json<serde_json::Value>, AppError> {
-<<<<<<< Updated upstream
-=======
     let pool = state.shard_router.get_pool_for_user(&user_id);
->>>>>>> Stashed changes
     let today = Utc::now().date_naive();
 
     let uuid: uuid::Uuid = sqlx::query_scalar(
         "SELECT id FROM users WHERE cf_access_sub = $1",
     )
     .bind(&user_id)
-<<<<<<< Updated upstream
-    .fetch_one(&state.pool)
-=======
     .fetch_one(pool)
->>>>>>> Stashed changes
     .await?;
 
     let rows = sqlx::query_as::<_, WorkoutCompletionItem>(
@@ -88,11 +70,7 @@ pub async fn completions(
     )
     .bind(uuid)
     .bind(today)
-<<<<<<< Updated upstream
-    .fetch_all(&state.pool)
-=======
     .fetch_all(pool)
->>>>>>> Stashed changes
     .await?;
 
     Ok(Json(serde_json::json!({ "data": { "completions": rows } })))

@@ -239,10 +239,7 @@ pub async fn upsert_subscription(
     let user = get_user_by_cf_sub(pool, &auth.user_id).await?;
     let status = input.status.as_deref().unwrap_or("active");
 
-<<<<<<< Updated upstream
-    // Check if subscription exists
-=======
->>>>>>> Stashed changes
+
     let existing = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM subscriptions WHERE user_id = $1)",
     )

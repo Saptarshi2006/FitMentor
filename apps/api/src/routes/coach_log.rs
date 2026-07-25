@@ -19,11 +19,6 @@ pub async fn log(
     AuthUser { user_id, .. }: AuthUser,
     Json(req): Json<CoachLogRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-<<<<<<< Updated upstream
-=======
-    let pool = state.shard_router.get_pool_for_user(&user_id);
-
->>>>>>> Stashed changes
     // Append messages to chat_sessions if session_id provided
     if let Some(sid) = &req.session_id {
         if let Ok(uuid) = sid.parse::<uuid::Uuid>() {
@@ -39,11 +34,7 @@ pub async fn log(
             ]))
             .bind(uuid)
             .bind(&user_id)
-<<<<<<< Updated upstream
-            .execute(&state.pool)
-=======
-            .execute(pool)
->>>>>>> Stashed changes
+            .execute(state.shard_router.get_pool_for_user(&user_id))
             .await?;
         }
     }
@@ -57,7 +48,7 @@ pub async fn log(
     .bind(&user_id)
     .bind(&req.container_tag)
     .bind(&serde_json::json!([]))
-    .execute(pool)
+    .execute(state.shard_router.get_pool_for_user(&user_id))
     .await?;
 
     // Forward to Python ingest for Supermemory
