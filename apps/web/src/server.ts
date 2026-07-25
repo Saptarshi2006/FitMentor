@@ -2,6 +2,7 @@ import "./utils/error-capture";
 
 import { consumeLastCapturedError } from "./utils/error-capture";
 import { renderErrorPage } from "./utils/error-page";
+import { deriveKey } from "./utils/session";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -62,7 +63,8 @@ async function getUserSub(request: Request, env: any): Promise<string | null> {
   try {
     const kv = env?.fitmentor_sessions;
     if (!kv) return null;
-    const data = await kv.get(raw);
+    const key = await deriveKey(raw);
+    const data = await kv.get(key);
     if (!data) return null;
     return JSON.parse(data).sub ?? null;
   } catch {
