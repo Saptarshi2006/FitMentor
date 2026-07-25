@@ -36,10 +36,6 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
   });
 }
 
-function getCloudflareEnv(request: Request) {
-  return (request as any).runtime?.cloudflare?.env ?? null;
-}
-
 function aiText(r: any): string {
   if (!r) return "";
   if (typeof r === "string") return r;
@@ -107,9 +103,8 @@ async function getUserSession(request: Request, env: any): Promise<{ sub: string
 
 // Strip AI generation handlers, proxy to Rust API
 
-async function handleMealPlan(request: Request): Promise<Response> {
+async function handleMealPlan(request: Request, env: any): Promise<Response> {
   try {
-    const env = getCloudflareEnv(request);
     const sub = await getUserSub(request, env);
 
     if (!sub) return new Response(JSON.stringify({ error: "not authenticated" }), { status: 401, headers: { "content-type": "application/json" } });
@@ -130,9 +125,8 @@ async function handleMealPlan(request: Request): Promise<Response> {
   }
 }
 
-async function handleWorkoutPlan(request: Request): Promise<Response> {
+async function handleWorkoutPlan(request: Request, env: any): Promise<Response> {
   try {
-    const env = getCloudflareEnv(request);
     const sub = await getUserSub(request, env);
 
     if (!sub) return new Response(JSON.stringify({ error: "not authenticated" }), { status: 401, headers: { "content-type": "application/json" } });
@@ -153,9 +147,8 @@ async function handleWorkoutPlan(request: Request): Promise<Response> {
   }
 }
 
-async function proxyGetAdvice(request: Request, apiPath: string): Promise<Response> {
+async function proxyGetAdvice(request: Request, apiPath: string, env: any): Promise<Response> {
   try {
-    const env = getCloudflareEnv(request);
     const sub = await getUserSub(request, env);
     if (!sub) return new Response(JSON.stringify({ error: "not authenticated" }), { status: 401, headers: { "content-type": "application/json" } });
 
@@ -176,25 +169,24 @@ async function proxyGetAdvice(request: Request, apiPath: string): Promise<Respon
   }
 }
 
-async function handleBMIGet(request: Request): Promise<Response> {
-  return proxyGetAdvice(request, "/v1/tools/bmi-advice");
+async function handleBMIGet(request: Request, env: any): Promise<Response> {
+  return proxyGetAdvice(request, "/v1/tools/bmi-advice", env);
 }
 
-async function handleSleepGet(request: Request): Promise<Response> {
-  return proxyGetAdvice(request, "/v1/tools/sleep-advice");
+async function handleSleepGet(request: Request, env: any): Promise<Response> {
+  return proxyGetAdvice(request, "/v1/tools/sleep-advice", env);
 }
 
-async function handleInjuryGet(request: Request): Promise<Response> {
-  return proxyGetAdvice(request, "/v1/tools/injury-advice");
+async function handleInjuryGet(request: Request, env: any): Promise<Response> {
+  return proxyGetAdvice(request, "/v1/tools/injury-advice", env);
 }
 
-async function handleFormGet(request: Request): Promise<Response> {
-  return proxyGetAdvice(request, "/v1/tools/form-advice");
+async function handleFormGet(request: Request, env: any): Promise<Response> {
+  return proxyGetAdvice(request, "/v1/tools/form-advice", env);
 }
 
-async function handleGraphQL(request: Request): Promise<Response> {
+async function handleGraphQL(request: Request, env: any): Promise<Response> {
   try {
-    const env = getCloudflareEnv(request);
     const session = await getUserSession(request, env);
     if (!session || !session.sub) {
       return new Response(JSON.stringify({ errors: [{ message: "Unauthorized" }] }), { status: 401, headers: { "content-type": "application/json" } });
@@ -225,9 +217,8 @@ async function handleGraphQL(request: Request): Promise<Response> {
   }
 }
 
-async function handleValidateSession(request: Request): Promise<Response> {
+async function handleValidateSession(request: Request, env: any): Promise<Response> {
   try {
-    const env = getCloudflareEnv(request);
     const kv = env?.fitmentor_sessions;
     if (!kv) return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
 
@@ -252,9 +243,8 @@ async function handleValidateSession(request: Request): Promise<Response> {
   }
 }
 
-async function handleCheckout(request: Request): Promise<Response> {
+async function handleCheckout(request: Request, env: any): Promise<Response> {
   try {
-    const env = getCloudflareEnv(request);
     const sub = await getUserSub(request, env);
     if (!sub) return new Response(JSON.stringify({ error: "not authenticated" }), { status: 401, headers: { "content-type": "application/json" } });
 
@@ -288,31 +278,31 @@ export default {
     try {
       const url = new URL(request.url);
       if (url.pathname === "/api/meal-plan" && request.method === "POST") {
-        return await handleMealPlan(request);
+        return await handleMealPlan(request, env);
       }
       if (url.pathname === "/api/workout-plan" && request.method === "POST") {
-        return await handleWorkoutPlan(request);
+        return await handleWorkoutPlan(request, env);
       }
       if (url.pathname === "/api/tools/injury" && request.method === "GET") {
-        return await handleInjuryGet(request);
+        return await handleInjuryGet(request, env);
       }
       if (url.pathname === "/api/tools/bmi-advice" && request.method === "GET") {
-        return await handleBMIGet(request);
+        return await handleBMIGet(request, env);
       }
       if (url.pathname === "/api/tools/sleep-advice" && request.method === "GET") {
-        return await handleSleepGet(request);
+        return await handleSleepGet(request, env);
       }
       if (url.pathname === "/api/tools/form-analyze" && request.method === "GET") {
-        return await handleFormGet(request);
+        return await handleFormGet(request, env);
       }
       if (url.pathname === "/api/checkout" && request.method === "POST") {
-        return await handleCheckout(request);
+        return await handleCheckout(request, env);
       }
       if (url.pathname === "/api/graphql" && request.method === "POST") {
-        return await handleGraphQL(request);
+        return await handleGraphQL(request, env);
       }
       if (url.pathname === "/api/validate-session" && request.method === "GET") {
-        return await handleValidateSession(request);
+        return await handleValidateSession(request, env);
       }
 
       const handler = await getServerEntry();
