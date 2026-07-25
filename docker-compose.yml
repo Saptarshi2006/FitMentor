@@ -51,6 +51,7 @@ services:
       KAFKA_BROKERS: kafka:9092
       PORT: "3000"
       POLAR_WEBHOOK_SECRET: ${POLAR_WEBHOOK_SECRET:-}
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://fitmentor-7lx.pages.dev}
     depends_on:
       - postgres
       - redis

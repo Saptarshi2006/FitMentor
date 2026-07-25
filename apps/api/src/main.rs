@@ -15,7 +15,7 @@ use config::Config;
 use graphql::schema::create_schema;
 use sqlx::PgPool;
 use std::sync::Arc;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::CorsLayer;
 use tracing_subscriber::EnvFilter;
 
 use crate::services::cache::CacheService;
@@ -260,8 +260,9 @@ async fn main() {
         planner_url: config.planner_url,
     };
 
+    let origin = config.cors_origin.parse::<header::HeaderValue>().expect("invalid cors_origin");
     let cors = CorsLayer::new()
-        .allow_origin(Any)
+        .allow_origin(std::collections::HashSet::from([origin.clone()]))
         .allow_methods([
             Method::GET,
             Method::POST,

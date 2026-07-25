@@ -15,10 +15,9 @@ pub struct Config {
     pub polar_premium_price_id: String,
     pub polar_pro_product_id: String,
     pub polar_pro_price_id: String,
-    // Shared secret for trusted server-to-server calls from frontend
     pub api_shared_secret: String,
-    // Daily planner URL for triggering plan generation
     pub planner_url: String,
+    pub cors_origin: String,
 }
 
 impl Config {
@@ -58,6 +57,8 @@ impl Config {
                 .unwrap_or_default(),
             planner_url: std::env::var("PLANNER_URL")
                 .unwrap_or_else(|_| "http://planner:8002".into()),
+            cors_origin: std::env::var("CORS_ORIGIN")
+                .unwrap_or_else(|_| "https://fitmentor-7lx.pages.dev".into()),
         }
     }
 }
