@@ -52,6 +52,16 @@ services:
       PORT: "3000"
       POLAR_WEBHOOK_SECRET: ${POLAR_WEBHOOK_SECRET:-}
       CORS_ORIGIN: ${CORS_ORIGIN:-https://fitmentor-7lx.pages.dev}
+      API_SHARED_SECRET: ${API_SHARED_SECRET:-}
+      APP_URL: ${APP_URL:-https://fitmentor-7lx.pages.dev}
+      CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
+      CF_ACCESS_AUD: ${CF_ACCESS_AUD:-}
+      POLAR_ACCESS_TOKEN: ${POLAR_ACCESS_TOKEN:-}
+      POLAR_PREMIUM_PRODUCT_ID: ${POLAR_PREMIUM_PRODUCT_ID:-}
+      POLAR_PREMIUM_PRICE_ID: ${POLAR_PREMIUM_PRICE_ID:-}
+      POLAR_PRO_PRODUCT_ID: ${POLAR_PRO_PRODUCT_ID:-}
+      POLAR_PRO_PRICE_ID: ${POLAR_PRO_PRICE_ID:-}
+      PLANNER_URL: ${PLANNER_URL:-http://planner:8002}
     depends_on:
       - postgres
       - redis

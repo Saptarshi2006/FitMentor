@@ -89,6 +89,22 @@ async function callApi(sub: string, path: string, method: string, body?: unknown
   });
 }
 
+async function getUserSession(request: Request, env: any): Promise<{ sub: string; email: string } | null> {
+  const raw = parseCookie(request.headers.get("cookie"), "fitmentor_session");
+  if (!raw) return null;
+  try {
+    const kv = env?.fitmentor_sessions;
+    if (!kv) return null;
+    const key = await deriveKey(raw);
+    const data = await kv.get(key);
+    if (!data) return null;
+    const session = JSON.parse(data);
+    return { sub: session.sub ?? null, email: session.email ?? "" };
+  } catch {
+    return null;
+  }
+}
+
 // Strip AI generation handlers, proxy to Rust API
 
 async function handleMealPlan(request: Request): Promise<Response> {
@@ -176,6 +192,39 @@ async function handleFormGet(request: Request): Promise<Response> {
   return proxyGetAdvice(request, "/v1/tools/form-advice");
 }
 
+async function handleGraphQL(request: Request): Promise<Response> {
+  try {
+    const env = getCloudflareEnv(request);
+    const session = await getUserSession(request, env);
+    if (!session || !session.sub) {
+      return new Response(JSON.stringify({ errors: [{ message: "Unauthorized" }] }), { status: 401, headers: { "content-type": "application/json" } });
+    }
+
+    const apiKey = process.env.API_SHARED_SECRET;
+    if (!apiKey) return new Response(JSON.stringify({ errors: [{ message: "Unauthorized" }] }), { status: 401, headers: { "content-type": "application/json" } });
+
+    const body = await request.text();
+    const res = await fetch(`${API_URL}/graphql`, {
+      method: "POST",
+      headers: {
+        "X-Api-Key": apiKey,
+        "X-User-Id": session.sub,
+        "X-User-Email": session.email,
+        "Content-Type": "application/json",
+      },
+      body,
+    });
+
+    const text = await res.text();
+    return new Response(text, {
+      status: res.status,
+      headers: { "content-type": "application/json" },
+    });
+  } catch (e: any) {
+    return new Response(JSON.stringify({ errors: [{ message: e?.message ?? "Internal error" }] }), { status: 500, headers: { "content-type": "application/json" } });
+  }
+}
+
 async function handleValidateSession(request: Request): Promise<Response> {
   try {
     const env = getCloudflareEnv(request);
@@ -258,6 +307,9 @@ export default {
       }
       if (url.pathname === "/api/checkout" && request.method === "POST") {
         return await handleCheckout(request);
+      }
+      if (url.pathname === "/api/graphql" && request.method === "POST") {
+        return await handleGraphQL(request);
       }
       if (url.pathname === "/api/validate-session" && request.method === "GET") {
         return await handleValidateSession(request);
