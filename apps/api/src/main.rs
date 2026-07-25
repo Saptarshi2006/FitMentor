@@ -262,7 +262,7 @@ async fn main() {
 
     let origin = config.cors_origin.parse::<header::HeaderValue>().expect("invalid cors_origin");
     let cors = CorsLayer::new()
-        .allow_origin(std::collections::HashSet::from([origin.clone()]))
+        .allow_origin(vec![origin.clone()])
         .allow_methods([
             Method::GET,
             Method::POST,
