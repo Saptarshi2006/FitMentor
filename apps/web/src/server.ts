@@ -275,6 +275,7 @@ async function handleCheckout(request: Request, env: any): Promise<Response> {
 
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
+    (globalThis as any).__cf_env = env;
     try {
       const url = new URL(request.url);
       if (url.pathname === "/api/meal-plan" && request.method === "POST") {

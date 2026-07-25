@@ -6,10 +6,10 @@ function getCloudflareEnv(): Record<string, unknown> | null {
     const key = Symbol.for("tanstack-start:event-storage");
     const store = (globalThis as any)[key]?.getStore?.();
     const event: any = store?.h3Event;
-    return event?.req?.runtime?.cloudflare?.env ?? null;
-  } catch {
-    return null;
-  }
+    const fromAls = event?.req?.runtime?.cloudflare?.env;
+    if (fromAls) return fromAls;
+  } catch {}
+  return (globalThis as any).__cf_env ?? null;
 }
 
 export function getKV(): any | null {
