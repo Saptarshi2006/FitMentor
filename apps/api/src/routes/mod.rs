@@ -22,6 +22,7 @@ pub fn routes() -> Router<AppState> {
         // User & Profile
         .route("/v1/user/me", axum::routing::get(user::get_me))
         .route("/v1/user/exists", axum::routing::get(user::check_user_exists))
+        .route("/v1/user/sync", axum::routing::post(user::sync_user))
         .route("/v1/user/profile", axum::routing::put(user::update_profile))
         .route(
             "/v1/user/profile/protein-target",

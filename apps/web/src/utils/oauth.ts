@@ -59,8 +59,8 @@ export const getDiscordAuthUrl = createServerFn({ method: "GET" })
   .validator((d?: { mode?: string }) => d ?? {})
   .handler(async (ctx) => {
     const clientId = process.env.DISCORD_CLIENT_ID || "";
-    const apiUrl = process.env.API_URL || "https://16-112-132-239.sslip.io";
-    const redirectUri = `${apiUrl}/v1/auth/callback`;
+    const appUrl = process.env.APP_URL || "https://fitmentor-7lx.pages.dev";
+    const redirectUri = `${appUrl}/auth/discord/callback`;
     const url = new URL("https://discord.com/api/oauth2/authorize");
     url.searchParams.set("client_id", clientId);
     url.searchParams.set("redirect_uri", redirectUri);
@@ -113,6 +113,18 @@ export const exchangeDiscordCode = createServerFn({ method: "POST" })
     if (!sid) return { ok: false, error: "session_create_failed" } as const;
 
     setSessionCookie(sid);
+
+    const apiUrl = process.env.API_URL || "https://16-112-132-239.sslip.io";
+    const apiKey = process.env.API_SHARED_SECRET;
+    try {
+      await fetch(`${apiUrl}/v1/user/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": apiKey ?? "", "x-user-id": sub, "x-user-email": email },
+        body: JSON.stringify({ cf_sub: sub, email, name: discordUser.username }),
+      });
+    } catch {
+      // API sync is best-effort; session still works for frontend
+    }
 
     return {
       ok: true,

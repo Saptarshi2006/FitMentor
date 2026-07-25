@@ -1,12 +1,44 @@
 use axum::extract::{State, Json as AxumJson};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use serde::Deserialize;
 
 use crate::auth::middleware::AuthUser;
 use crate::error::AppError;
 use crate::models::profile::{Profile, ProteinTarget, UpdateProfile};
 use crate::models::user::User;
 use crate::AppState;
+
+#[derive(Deserialize)]
+pub struct SyncUserRequest {
+    pub cf_sub: String,
+    pub email: String,
+    pub name: Option<String>,
+}
+
+pub async fn sync_user(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    AxumJson(req): AxumJson<SyncUserRequest>,
+) -> Result<AxumJson<serde_json::Value>, AppError> {
+    let api_key = headers.get("x-api-key").and_then(|v| v.to_str().ok()).unwrap_or("");
+    if api_key.is_empty() || api_key != state.api_shared_secret {
+        return Err(AppError::Unauthorized);
+    }
+
+    let user = sqlx::query_as::<_, User>(
+        "INSERT INTO users (cf_access_sub, email, name) VALUES ($1, $2, $3)
+         ON CONFLICT (cf_access_sub) DO UPDATE SET email = EXCLUDED.email, name = COALESCE(EXCLUDED.name, users.name), updated_at = now()
+         RETURNING id, cf_access_sub, email, name, created_at, updated_at"
+    )
+    .bind(&req.cf_sub)
+    .bind(&req.email)
+    .bind(&req.name)
+    .fetch_one(&state.pool)
+    .await?;
+
+    Ok(AxumJson(serde_json::json!({ "ok": true, "user": { "id": user.id, "cf_sub": user.cf_access_sub, "email": user.email } })))
+}
 
 fn profile_to_value(p: Profile) -> serde_json::Value {
     serde_json::json!({
