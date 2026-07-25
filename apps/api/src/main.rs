@@ -62,7 +62,7 @@ async fn extract_auth_user(
             if let Some(sid) = part.strip_prefix("fitmentor_session=") {
                 if let Some(data) = state.cache.get(&format!("session:{}", sid)).await {
                     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&data) {
-                        let user_id = json["sub"].or_else(|| json["cf_sub"]).and_then(|v| v.as_str().map(String::from)).unwrap_or_default();
+                        let user_id = json.get("sub").or_else(|| json.get("cf_sub")).and_then(|v| v.as_str().map(String::from)).unwrap_or_default();
                         let email = json["email"].as_str().unwrap_or("").to_string();
                         let name = json["name"].as_str().unwrap_or("").to_string();
                         if !user_id.is_empty() {
