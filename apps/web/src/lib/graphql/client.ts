@@ -7,7 +7,8 @@ export function setAuthToken(t: string | null) {
 }
 
 export function getClient() {
-  return new GraphQLClient("/api/graphql", {
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  return new GraphQLClient(`${origin}/api/graphql`, {
     headers: () => {
       const h: Record<string, string> = {};
       if (token) {
