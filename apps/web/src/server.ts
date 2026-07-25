@@ -232,6 +232,30 @@ export default {
       if (url.pathname === "/api/checkout" && request.method === "POST") {
         return await handleCheckout(request);
       }
+      if (url.pathname === "/graphql" && request.method === "POST") {
+        const env = getCloudflareEnv(request);
+        const sub = await getUserSub(request, env);
+        const apiKey = process.env.API_SHARED_SECRET;
+        if (!apiKey) return new Response("missing API key", { status: 500 });
+        const headers: Record<string, string> = {
+          "X-Api-Key": apiKey,
+          "Content-Type": "application/json",
+        };
+        if (sub) {
+          headers["X-User-Id"] = sub;
+        }
+        const body = await request.text();
+        const res = await fetch(`${API_URL}/graphql`, {
+          method: "POST",
+          headers,
+          body,
+        });
+        const data = await res.text();
+        return new Response(data, {
+          status: res.status,
+          headers: { "content-type": "application/json" },
+        });
+      }
 
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
