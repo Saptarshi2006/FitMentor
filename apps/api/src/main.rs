@@ -39,6 +39,7 @@ async fn extract_auth_user(
     state: &AppState,
     headers: &axum::http::HeaderMap,
 ) -> Option<auth::middleware::AuthUser> {
+    // API key auth (server-to-server)
     if !state.api_shared_secret.is_empty() {
         if let Some(api_key) = headers.get("x-api-key").and_then(|v| v.to_str().ok()) {
             if api_key == state.api_shared_secret {
@@ -48,9 +49,30 @@ async fn extract_auth_user(
             }
         }
     }
-    let token = headers.get("cf-access-jwt-assertion").or_else(|| headers.get("authorization")).and_then(|v| v.to_str().ok()).and_then(|s| s.strip_prefix("Bearer ").or(Some(s)))?;
-    let claims: auth::jwt::Claims = state.jwt_validator.validate(token).await.ok()?;
-    Some(auth::middleware::AuthUser { user_id: claims.sub, email: claims.email })
+    // JWT auth (Authorization or cf-access-jwt-assertion header)
+    if let Some(token) = headers.get("cf-access-jwt-assertion").or_else(|| headers.get("authorization")).and_then(|v| v.to_str().ok()).and_then(|s| s.strip_prefix("Bearer ").or(Some(s))) {
+        if let Ok(claims) = state.jwt_validator.validate(token).await {
+            return Some(auth::middleware::AuthUser { user_id: claims.sub, email: claims.email });
+        }
+    }
+    // Session cookie auth (browser requests)
+    if let Some(cookie) = headers.get("cookie").and_then(|v| v.to_str().ok()) {
+        for part in cookie.split(';') {
+            let part = part.trim();
+            if let Some(sid) = part.strip_prefix("fitmentor_session=") {
+                if let Some(data) = state.cache.get(&format!("session:{}", sid)).await {
+                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&data) {
+                        let user_id = json["cf_sub"].as_str().unwrap_or("").to_string();
+                        let email = json["email"].as_str().unwrap_or("").to_string();
+                        if !user_id.is_empty() {
+                            return Some(auth::middleware::AuthUser { user_id, email });
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 #[derive(Clone)]

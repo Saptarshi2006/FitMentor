@@ -12,7 +12,7 @@ import {
   clearSubscription,
   type PlanTier,
 } from "@/utils/subscription";
-import { fetchSubscription } from "@/services/sync.server";
+import { fetchSubscription } from "@/services/sync";
 import { Button } from "@/components/ui/button";
 import {
   Crown,

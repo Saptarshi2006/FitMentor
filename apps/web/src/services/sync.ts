@@ -84,3 +84,21 @@ export const syncProfile = createServerFn({ method: "POST" })
 
     return { ok: true } as const;
   });
+
+export const fetchSubscription = createServerFn({ method: "POST" }).handler(async () => {
+  const raw = getCookie(SESSION_COOKIE);
+  if (!raw) return { data: { subscription: null } };
+  const session = await getSession(raw);
+  if (!session) return { data: { subscription: null } };
+  const apiKey = process.env.API_SHARED_SECRET;
+  if (!apiKey) return { data: { subscription: null } };
+  const res = await fetch(`${process.env.API_URL || "https://16-112-132-239.sslip.io"}/v1/user/subscription`, {
+    method: "GET",
+    headers: {
+      "X-Api-Key": apiKey,
+      "X-User-Id": session.sub,
+    },
+  });
+  if (!res.ok) return { data: { subscription: null } };
+  return res.json();
+});

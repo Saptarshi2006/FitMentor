@@ -28,8 +28,6 @@ import {
   Dumbbell,
 } from "lucide-react";
 import { toast } from "sonner";
-import { getClient } from "@/lib/graphql/client";
-import { TODAY_AI_PLAN_QUERY } from "@/lib/graphql/queries";
 
 export const Route = createFileRoute("/tools")({
   head: () => ({ meta: [{ title: "AI Tools — FitMentor" }] }),
