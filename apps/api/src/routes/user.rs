@@ -2,6 +2,7 @@ use axum::extract::{State, Json as AxumJson};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
+use uuid::Uuid;
 
 use crate::auth::middleware::AuthUser;
 use crate::error::AppError;
@@ -37,7 +38,21 @@ pub async fn sync_user(
     .fetch_one(&state.pool)
     .await?;
 
-    Ok(AxumJson(serde_json::json!({ "ok": true, "user": { "id": user.id, "cf_sub": user.cf_access_sub, "email": user.email } })))
+    let session_id = Uuid::new_v4().to_string();
+    let session_data = serde_json::json!({
+        "sub": req.cf_sub,
+        "cf_sub": req.cf_sub,
+        "email": req.email,
+        "name": req.name,
+        "iat": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis(),
+    });
+    state.cache.set(&format!("session:{}", session_id), &session_data.to_string(), 604800).await;
+
+    Ok(AxumJson(serde_json::json!({
+        "ok": true,
+        "session_id": session_id,
+        "user": { "id": user.id, "cf_sub": user.cf_access_sub, "email": user.email }
+    })))
 }
 
 fn profile_to_value(p: Profile) -> serde_json::Value {

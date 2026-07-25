@@ -12,7 +12,7 @@ function getCloudflareEnv(): Record<string, unknown> | null {
   }
 }
 
-function getKV(): any | null {
+export function getKV(): any | null {
   const env = getCloudflareEnv();
   if (!env) return null;
   return env.fitmentor_sessions ?? null;

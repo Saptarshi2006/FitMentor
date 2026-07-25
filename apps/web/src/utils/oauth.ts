@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getCookie, setResponseHeader } from "@tanstack/react-start/server";
-import { getSession, createSession, deleteSession, renewSession, deleteRememberToken } from "@/utils/session";
+import { getSession, createSession, deleteSession, renewSession, deleteRememberToken, getKV, deriveKey } from "@/utils/session";
 import { useState, useEffect } from "react";
 
 interface DiscordUser {
@@ -103,32 +103,44 @@ export const exchangeDiscordCode = createServerFn({ method: "POST" })
 
     const sub = `discord:${discordUser.id}`;
     const email = discordUser.email || `${discordUser.username}@discord`;
+    const name = discordUser.username;
 
-    const sid = await createSession({
-      sub,
-      email,
-      name: discordUser.username,
-      provider: "discord",
-    });
-    if (!sid) return { ok: false, error: "session_create_failed" } as const;
-
-    setSessionCookie(sid);
-
+    // Try API-first: create user + Redis session via sync
+    let sid: string | null = null;
     const apiUrl = process.env.API_URL || "https://16-112-132-239.sslip.io";
     const apiKey = process.env.API_SHARED_SECRET;
     try {
-      await fetch(`${apiUrl}/v1/user/sync`, {
+      const syncRes = await fetch(`${apiUrl}/v1/user/sync`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": apiKey ?? "", "x-user-id": sub, "x-user-email": email },
-        body: JSON.stringify({ cf_sub: sub, email, name: discordUser.username }),
+        headers: { "Content-Type": "application/json", "x-api-key": apiKey ?? "" },
+        body: JSON.stringify({ cf_sub: sub, email, name }),
       });
-    } catch {
-      // API sync is best-effort; session still works for frontend
+      if (syncRes.ok) {
+        const data = await syncRes.json();
+        sid = data.session_id;
+      }
+    } catch {}
+
+    if (sid) {
+      // Also store session data in KV so Workers functions (getSession) can find it
+      const kv = getKV();
+      if (kv) {
+        const key = await deriveKey(sid);
+        await kv.put(key, JSON.stringify({ sub, email, name, provider: "discord", rememberToken: "", createdAt: Date.now() }), {
+          expirationTtl: SESSION_MAX_AGE,
+        });
+      }
+      setSessionCookie(sid);
+    } else {
+      // Fallback: KV-only session (API unreachable)
+      sid = await createSession({ sub, email, name, provider: "discord" });
+      if (!sid) return { ok: false, error: "session_create_failed" } as const;
+      setSessionCookie(sid);
     }
 
     return {
       ok: true,
-      user: { sub, email, name: discordUser.username, provider: "discord" },
+      user: { sub, email, name, provider: "discord" },
     } as const;
   });
 
