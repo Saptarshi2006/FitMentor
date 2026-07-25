@@ -28,7 +28,7 @@ macro_rules! make_get_handlers {
         ) -> Result<Response, AppError> {
             let today = Utc::now().date_naive();
             let table = stringify!($table);
-            let pool = state.shard_router.get_pool_for_user(&auth.user_id);
+            let pool = &state.pool;
             let row = sqlx::query_as::<_, PlanRow>(
                 &format!("SELECT plan FROM {table} WHERE user_id = $1 AND date = $2"),
             )
@@ -65,7 +65,7 @@ macro_rules! make_upsert_handlers {
             let today = Utc::now().date_naive();
             let table = stringify!($table);
             let user_id = auth.user_id.clone();
-            let pool = state.shard_router.get_pool_for_user(&user_id);
+            let pool = &state.pool;
 
             sqlx::query(&format!(
                 "INSERT INTO {table} (user_id, date, plan) VALUES ($1, $2, $3)

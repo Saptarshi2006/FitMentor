@@ -42,7 +42,7 @@ pub async fn create(
     AuthUser { user_id, .. }: AuthUser,
     Json(req): Json<CreateRequest>,
 ) -> Result<Json<CreateResponse>, crate::error::AppError> {
-    let pool = state.shard_router.get_pool_for_user(&user_id);
+    let pool = &state.pool;
     let title = req.title.unwrap_or_else(|| "New Chat".into());
     let id = sqlx::query_scalar::<_, Uuid>(
         "INSERT INTO chat_sessions (user_id, title) VALUES ($1, $2) RETURNING id",
@@ -60,7 +60,7 @@ pub async fn list(
     State(state): State<AppState>,
     AuthUser { user_id, .. }: AuthUser,
 ) -> Result<Json<Vec<SessionListItem>>, crate::error::AppError> {
-    let pool = state.shard_router.get_pool_for_user(&user_id);
+    let pool = &state.pool;
     let rows = sqlx::query_as::<_, SessionRow>(
         "SELECT id, user_id, title, messages, created_at, updated_at
          FROM chat_sessions
@@ -97,7 +97,7 @@ pub async fn get(
     AuthUser { user_id, .. }: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<Json<SessionRow>, crate::error::AppError> {
-    let pool = state.shard_router.get_pool_for_user(&user_id);
+    let pool = &state.pool;
     let row = sqlx::query_as::<_, SessionRow>(
         "SELECT id, user_id, title, messages, created_at, updated_at
          FROM chat_sessions WHERE id = $1 AND user_id = $2",
@@ -117,7 +117,7 @@ pub async fn delete(
     AuthUser { user_id, .. }: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, crate::error::AppError> {
-    let pool = state.shard_router.get_pool_for_user(&user_id);
+    let pool = &state.pool;
     let result = sqlx::query("DELETE FROM chat_sessions WHERE id = $1 AND user_id = $2")
         .bind(id)
         .bind(&user_id)

@@ -31,7 +31,7 @@ pub async fn get_today(
     auth: AuthUser,
     State(state): State<AppState>,
 ) -> Result<Response, AppError> {
-    let pool = state.shard_router.get_pool_for_user(&auth.user_id);
+    let pool = &state.pool;
     let user = get_user_id(pool, &auth.user_id).await?;
 
     let cache_key = format!("cache:today:{}", user.id);
@@ -64,7 +64,7 @@ pub async fn upsert_today(
     State(state): State<AppState>,
     AxumJson(input): AxumJson<UpdateDailyLog>,
 ) -> Result<Response, AppError> {
-    let pool = state.shard_router.get_pool_for_user(&auth.user_id);
+    let pool = &state.pool;
     let user = get_user_id(pool, &auth.user_id).await?;
     let today = Utc::now().date_naive();
 
@@ -105,7 +105,7 @@ pub async fn get_range(
     State(state): State<AppState>,
     Query(query): Query<DateRangeQuery>,
 ) -> Result<Response, AppError> {
-    let pool = state.shard_router.get_pool_for_user(&auth.user_id);
+    let pool = &state.pool;
     let user = get_user_id(pool, &auth.user_id).await?;
 
     let logs = sqlx::query_as::<_, DailyLog>(
@@ -141,7 +141,7 @@ pub async fn get_streak(
         }
     }
 
-    let pool = state.shard_router.get_pool_for_user(&auth.user_id);
+    let pool = &state.pool;
     let user = get_user_id(pool, &auth.user_id).await?;
 
     let rows = sqlx::query_as::<_, DateRow>(
