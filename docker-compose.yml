@@ -84,6 +84,7 @@ services:
       - "8002:8002"
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgres://fitmentor:fitmentor@postgres:5432/fitmentor}
+      REDIS_URL: redis://redis:6379
       CF_ACCOUNT_ID: ${CF_ACCOUNT_ID:-}
       CF_API_TOKEN: ${CF_API_TOKEN:-}
       PORT: "8002"

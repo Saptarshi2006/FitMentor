@@ -9,11 +9,45 @@ from urllib.parse import urlparse
 import httpx
 import psycopg2
 import psycopg2.extras
+import redis as redis_lib
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 CF_MODEL = "@cf/meta/llama-4-scout-17b-16e-instruct"
+PLANNER_AI_LIMIT = 2000
+PLANNER_USER_LIMIT = 50
+
+r = None
+
+def connect_redis():
+    global r
+    url = os.environ.get("REDIS_URL", "redis://redis:6379")
+    try:
+        r = redis_lib.Redis.from_url(url, decode_responses=True)
+        r.ping()
+        logger.info("Connected to Redis for quota tracking")
+    except Exception as e:
+        logger.warning("Redis unavailable, quota tracking disabled: %s", e)
+        r = None
+
+def check_quota(cf_sub: str) -> bool:
+    if r is None:
+        return True
+    today = date.today().isoformat()
+    pipe = r.pipeline()
+    pipe.incr(f"quota:planner:ai:{today}")
+    pipe.expire(f"quota:planner:ai:{today}", 86400)
+    pipe.incr(f"quota:planner:user:{cf_sub}:{today}")
+    pipe.expire(f"quota:planner:user:{cf_sub}:{today}", 86400)
+    global_count, _, user_count, _ = pipe.execute()
+    if global_count > PLANNER_AI_LIMIT:
+        logger.warning("Planner AI daily limit reached (%d)", global_count)
+        return False
+    if user_count > PLANNER_USER_LIMIT:
+        logger.warning("User %s daily AI limit reached (%d)", cf_sub, user_count)
+        return False
+    return True
 
 def call_cf_ai(system: str, prompt: str, max_tokens: int = 2048) -> str:
     account_id = os.environ.get("CF_ACCOUNT_ID", "")
@@ -218,6 +252,8 @@ def get_recent_logs(conn, user_id, days: int = 7) -> list[dict]:
 
 
 def generate_for_user(conn, cf_sub: str) -> None:
+    if not check_quota(cf_sub):
+        return
     user = get_user_by_cf_sub(conn, cf_sub)
     if not user:
         logger.warning("User %s not found, skipping", cf_sub)
@@ -259,6 +295,7 @@ def generate_for_user(conn, cf_sub: str) -> None:
 
 
 def run():
+    connect_redis()
     conn = psycopg2.connect(os.environ["DATABASE_URL"])
     users = get_users(conn)
     logger.info("Loaded %d users", len(users))
@@ -324,6 +361,7 @@ class GenerateHandler(BaseHTTPRequestHandler):
 
 
 def serve():
+    connect_redis()
     port = int(os.environ.get("PORT", "8080"))
     conn = psycopg2.connect(os.environ["DATABASE_URL"])
     GenerateHandler.conn = conn

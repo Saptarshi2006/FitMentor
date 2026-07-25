@@ -68,11 +68,12 @@ Rules:
 
 ${profileBlock}`;
 
-    const messages: ChatMessage[] = [{ role: "system", content: system }, ...data.messages];
-    const reply = await chatCompletion({ messages });
-
     const sid = getCookie(SESSION_COOKIE);
     const session = sid ? await getSession(sid) : null;
+
+    const messages: ChatMessage[] = [{ role: "system", content: system }, ...data.messages];
+    const reply = await chatCompletion({ messages, userId: session?.sub });
+
     if (session?.sub) {
       const apiUrl = process.env.API_URL || "https://16-112-132-239.sslip.io";
       const apiKey = process.env.API_SHARED_SECRET;
