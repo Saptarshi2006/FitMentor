@@ -58,15 +58,14 @@ export function useAuth() {
 export const getDiscordAuthUrl = createServerFn({ method: "GET" })
   .validator((d?: { mode?: string }) => d ?? {})
   .handler(async (ctx) => {
-    const mode = ctx.data.mode;
     const clientId = process.env.DISCORD_CLIENT_ID || "";
-    const redirectUri = `${process.env.APP_URL || "https://fitmentor-7lx.pages.dev"}/auth/discord/callback`;
+    const apiUrl = process.env.API_URL || "https://16-112-132-239.sslip.io";
+    const redirectUri = `${apiUrl}/v1/auth/callback`;
     const url = new URL("https://discord.com/api/oauth2/authorize");
     url.searchParams.set("client_id", clientId);
     url.searchParams.set("redirect_uri", redirectUri);
     url.searchParams.set("response_type", "code");
     url.searchParams.set("scope", "identify email");
-    if (mode) url.searchParams.set("state", mode);
     return url.toString();
   });
 

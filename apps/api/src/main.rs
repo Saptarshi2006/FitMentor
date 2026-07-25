@@ -273,11 +273,14 @@ async fn main() {
             header::AUTHORIZATION,
             header::CONTENT_TYPE,
             header::ACCEPT,
+            header::COOKIE,
+            header::SET_COOKIE,
             "cf-access-jwt-assertion".parse().unwrap(),
             "x-api-key".parse().unwrap(),
             "x-user-id".parse().unwrap(),
             "x-user-email".parse().unwrap(),
-        ]);
+        ])
+        .allow_credentials(true);
 
     let app = routes::routes()
         .merge(Router::new().route("/graphql", axum::routing::get(graphiql).post(graphql_handler)))

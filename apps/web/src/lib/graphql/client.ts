@@ -10,6 +10,7 @@ export function setAuthToken(t: string | null) {
 
 export function getClient() {
   return new GraphQLClient(`${API_URL}/graphql`, {
+    credentials: "include",
     headers: () => {
       const h: Record<string, string> = {};
       if (token) {

@@ -140,7 +140,7 @@ pub async fn discord_callback(
     state.cache.set(&format!("session:{}", session_id), &session_data.to_string(), 604800).await;
     
     let cookie = format!(
-        "fitmentor_session={}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800",
+        "fitmentor_session={}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=604800",
         session_id
     );
     
