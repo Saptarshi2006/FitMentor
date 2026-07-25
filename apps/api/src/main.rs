@@ -2,6 +2,7 @@ mod auth;
 mod config;
 mod db;
 mod error;
+mod graphql;
 mod models;
 mod routes;
 mod services;
@@ -9,13 +10,48 @@ mod services;
 use auth::jwt::JwtValidator;
 use axum::http::header;
 use axum::http::Method;
+use axum::Router;
 use config::Config;
+use graphql::schema::create_schema;
 use sqlx::PgPool;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::EnvFilter;
 
 use crate::services::cache::CacheService;
+
+async fn graphiql() -> impl axum::response::IntoResponse {
+    axum::response::Html(async_graphql::http::GraphiQLSource::build().endpoint("/graphql").finish())
+}
+
+async fn graphql_handler(
+    state: axum::extract::State<AppState>,
+    headers: axum::http::HeaderMap,
+    req: async_graphql_axum::GraphQLRequest,
+) -> async_graphql_axum::GraphQLResponse {
+    let schema = create_schema();
+    let user = extract_auth_user(&state, &headers).await;
+    let gql_ctx = graphql::context::GqlContext::new(&state, user);
+    schema.execute(req.into_inner().data(gql_ctx)).await.into()
+}
+
+async fn extract_auth_user(
+    state: &AppState,
+    headers: &axum::http::HeaderMap,
+) -> Option<auth::middleware::AuthUser> {
+    if !state.api_shared_secret.is_empty() {
+        if let Some(api_key) = headers.get("x-api-key").and_then(|v| v.to_str().ok()) {
+            if api_key == state.api_shared_secret {
+                let user_id = headers.get("x-user-id").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+                let email = headers.get("x-user-email").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+                return Some(auth::middleware::AuthUser { user_id, email });
+            }
+        }
+    }
+    let token = headers.get("cf-access-jwt-assertion").or_else(|| headers.get("authorization")).and_then(|v| v.to_str().ok()).and_then(|s| s.strip_prefix("Bearer ").or(Some(s)))?;
+    let claims: auth::jwt::Claims = state.jwt_validator.validate(token).await.ok()?;
+    Some(auth::middleware::AuthUser { user_id: claims.sub, email: claims.email })
+}
 
 #[derive(Clone)]
 pub struct AppState {
@@ -202,7 +238,10 @@ async fn main() {
             "x-user-email".parse().unwrap(),
         ]);
 
-    let app = routes::routes(state).layer(cors);
+    let app = routes::routes()
+        .merge(Router::new().route("/graphql", axum::routing::get(graphiql).post(graphql_handler)))
+        .layer(cors)
+        .with_state(state);
 
     let addr = format!("0.0.0.0:{}", config.port);
     let listener = tokio::net::TcpListener::bind(&addr)

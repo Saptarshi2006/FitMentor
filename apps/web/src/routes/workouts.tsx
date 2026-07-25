@@ -7,6 +7,8 @@ import { saveLog, ensureToday } from "@/utils/habits";
 import { Button } from "@/components/ui/button";
 import { Check, ChevronRight, Clock, Dumbbell, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import { getClient } from "@/lib/graphql/client";
+import { TODAY_AI_PLAN_QUERY } from "@/lib/graphql/queries";
 
 export const Route = createFileRoute("/workouts")({
   head: () => ({ meta: [{ title: "Workouts — FitMentor" }] }),
@@ -25,18 +27,14 @@ function Workouts() {
     setFetchError(false);
     if (!profile) { setLoading(false); return; }
     setLoading(true);
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20000);
-    fetch("/api/workout-plan", {
-      method: "POST",
-      body: JSON.stringify(profile),
-      signal: controller.signal,
-    })
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((json) => setPlan(Array.isArray(json) ? json : json?.data?.plan ?? []))
+    getClient()
+      .request<{ todayAiPlan: { plan: WorkoutDay[] } | null }>(TODAY_AI_PLAN_QUERY, { table: "workout_plans" })
+      .then((data) => {
+        const plan = data.todayAiPlan?.plan;
+        setPlan(Array.isArray(plan) ? plan : []);
+      })
       .catch(() => setFetchError(true))
-      .finally(() => { clearTimeout(timeout); setLoading(false); });
-    return () => { controller.abort(); clearTimeout(timeout); };
+      .finally(() => setLoading(false));
   }, [profile]);
 
   return (

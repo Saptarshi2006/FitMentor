@@ -11,7 +11,7 @@ use axum::Router;
 
 use crate::AppState;
 
-pub fn routes(state: AppState) -> Router {
+pub fn routes() -> Router<AppState> {
     Router::new()
         // Health
         .route("/v1/health", axum::routing::get(health::health))
@@ -58,5 +58,4 @@ pub fn routes(state: AppState) -> Router {
             "/v1/webhooks/polar",
             axum::routing::post(payments::webhook_handler),
         )
-        .with_state(state)
 }
