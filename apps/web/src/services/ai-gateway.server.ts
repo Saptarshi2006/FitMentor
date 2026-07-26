@@ -3,15 +3,31 @@ export type ChatMessage = {
   content: string;
 };
 
-function getAI(): any | null {
+function getCloudflareEnv(): Record<string, unknown> | null {
   try {
     const key = Symbol.for("tanstack-start:event-storage");
     const store = (globalThis as any)[key]?.getStore?.();
     const event: any = store?.h3Event;
-    return event?.req?.runtime?.cloudflare?.env?.AI ?? null;
-  } catch {
-    return null;
-  }
+    if (event?.context?.cloudflare?.env) return event.context.cloudflare.env;
+    if (event?.context?.env) return event.context.env;
+    if (event?.req?.runtime?.cloudflare?.env) return event.req.runtime.cloudflare.env;
+  } catch {}
+  try {
+    const fromGlobal = (globalThis as any).__cf_env;
+    if (fromGlobal) return fromGlobal;
+  } catch {}
+  try {
+    const key = Symbol.for("nitro:event-context");
+    const store = (globalThis as any)[key]?.getStore?.();
+    const event: any = store?.event;
+    if (event?.context?.cloudflare?.env) return event.context.cloudflare.env;
+  } catch {}
+  return null;
+}
+
+function getAI(): any | null {
+  const env = getCloudflareEnv();
+  return (env as any)?.AI ?? null;
 }
 
 export async function chatCompletion(opts: {
