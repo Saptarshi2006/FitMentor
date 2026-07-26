@@ -26,7 +26,8 @@ export const checkSession = createServerFn({ method: "GET" }).handler(async () =
   const raw = getCookie(SESSION_COOKIE);
   if (raw) {
     // Try signed token first (no KV needed)
-    const session = await resolveSessionFromToken(raw);
+    const ip = getClientIp();
+    const session = await resolveSessionFromToken(raw, ip);
     if (session) return { ok: true } as const;
     // Legacy: try raw sid with KV
     const sid = await extractSessionId(raw);
@@ -47,7 +48,8 @@ export const checkSession = createServerFn({ method: "GET" }).handler(async () =
 export const getCurrentUser = createServerFn({ method: "GET" }).handler(async () => {
   const raw = getCookie(SESSION_COOKIE);
   if (!raw) return null;
-  const session = await resolveSessionFromToken(raw);
+  const ip = getClientIp();
+  const session = await resolveSessionFromToken(raw, ip);
   if (session) return session;
   // Legacy: try raw sid with KV
   const sid = await extractSessionId(raw);
@@ -83,6 +85,22 @@ export const getDiscordAuthUrl = createServerFn({ method: "GET" })
   });
 
 const discordCodec = (d: { code: string; state?: string }) => d;
+
+function getClientIp(): string {
+  try {
+    const key = Symbol.for("tanstack-start:event-storage");
+    const store = (globalThis as any)[key]?.getStore?.();
+    const event: any = store?.h3Event;
+    const headers = event?.req?.headers;
+    if (!headers) return "";
+    return headers["cf-connecting-ip"]
+      || (headers["x-forwarded-for"] as string)?.split(",")[0]?.trim()
+      || headers["x-real-ip"]
+      || "";
+  } catch {
+    return "";
+  }
+}
 
 async function checkUserExists(sub: string): Promise<boolean> {
   const apiUrl = process.env.API_URL || "https://16-112-132-239.sslip.io";
@@ -148,11 +166,13 @@ export const exchangeDiscordCode = createServerFn({ method: "POST" })
       return { ok: false, error: "user_not_found" } as const;
     }
 
+    const ip = getClientIp();
     const sid = await createSession({
       sub,
       email,
       name: discordUser.username,
       provider: "discord",
+      ip,
     });
     if (!sid) return { ok: false, error: "session_create_failed" } as const;
 

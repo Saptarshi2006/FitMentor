@@ -16,10 +16,27 @@ function authHeaders(sub: string, email?: string): Record<string, string> {
   return h;
 }
 
+function getClientIp(): string {
+  try {
+    const key = Symbol.for("tanstack-start:event-storage");
+    const store = (globalThis as any)[key]?.getStore?.();
+    const event: any = store?.h3Event;
+    const headers = event?.req?.headers;
+    if (!headers) return "";
+    return headers["cf-connecting-ip"]
+      || (headers["x-forwarded-for"] as string)?.split(",")[0]?.trim()
+      || headers["x-real-ip"]
+      || "";
+  } catch {
+    return "";
+  }
+}
+
 async function resolveSession(): Promise<{ sub: string; email: string } | null> {
   const raw = getCookie(SESSION_COOKIE);
   if (!raw) return null;
-  return resolveSessionFromToken(raw);
+  const ip = getClientIp();
+  return resolveSessionFromToken(raw, ip);
 }
 
 export const proxyGraphQL = createServerFn({ method: "POST" })

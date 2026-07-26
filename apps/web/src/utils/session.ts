@@ -1,6 +1,6 @@
-const SESSION_TTL = 60 * 60 * 24; // 24 hours
+const SESSION_TTL = 60 * 60; // 1 hour
 const REMEMBER_TTL = 60 * 60 * 24 * 7; // 7 days
-const TOKEN_MAX_AGE = 60 * 60 * 24 * 7; // 7 days — signed token lifetime
+const TOKEN_MAX_AGE = 60 * 60; // 1 hour — signed token lifetime
 
 function getCloudflareEnv(): Record<string, unknown> | null {
   // 1. Try TanStack Start ALS event storage (works in server functions)
@@ -109,10 +109,10 @@ function base64urlDecode(str: string): ArrayBuffer {
   return buf.buffer;
 }
 
-async function createSignedToken(sid: string): Promise<string> {
+async function createSignedToken(sid: string, ip?: string): Promise<string> {
   try {
     const secret = getSecret();
-    const payload = JSON.stringify({ sid, exp: Math.floor(Date.now() / 1000) + TOKEN_MAX_AGE });
+    const payload = JSON.stringify({ sid, ip: ip || "", exp: Math.floor(Date.now() / 1000) + TOKEN_MAX_AGE });
     const payloadB64 = base64urlEncode(new TextEncoder().encode(payload).buffer);
     const sig = await hmacSign(payloadB64, secret);
     return `${payloadB64}.${sig}`;
@@ -123,6 +123,7 @@ async function createSignedToken(sid: string): Promise<string> {
 
 export interface SignedTokenPayload {
   sid: string;
+  ip: string;
   exp: number;
 }
 
@@ -145,18 +146,26 @@ async function verifySignedToken(token: string): Promise<SignedTokenPayload | nu
 
 /**
  * Extract session data from the signed token and look up in KV.
- * Falls back to legacy raw sid with KV lookup.
+ * Verifies IP binding if present in token.
  */
-export async function resolveSessionFromToken(cookieValue: string): Promise<{ sub: string; email: string } | null> {
+export async function resolveSessionFromToken(cookieValue: string, currentIp?: string): Promise<{ sub: string; email: string } | null> {
   if (!cookieValue) return null;
 
   let sid: string | null = null;
+  let tokenIp: string | undefined;
+
   if (cookieValue.includes(".")) {
     const payload = await verifySignedToken(cookieValue);
     if (!payload) return null;
     sid = payload.sid;
+    tokenIp = payload.ip;
   } else {
     sid = cookieValue; // legacy raw sid
+  }
+
+  // IP binding check: if token has an IP, it must match the current request IP
+  if (tokenIp && currentIp && tokenIp !== currentIp) {
+    return null; // IP mismatch — possible token theft
   }
 
   // Look up session data from KV
@@ -191,7 +200,7 @@ export async function extractSessionId(cookieValue: string): Promise<string | nu
   return cookieValue;
 }
 
-export async function createSession(data: SessionData): Promise<string | null> {
+export async function createSession(data: SessionData & { ip?: string }): Promise<string | null> {
   const kv = getKV();
   if (!kv) return null;
   const sid = `sess_${crypto.randomUUID()}`;
@@ -205,7 +214,7 @@ export async function createSession(data: SessionData): Promise<string | null> {
       expirationTtl: REMEMBER_TTL,
     });
     // Return a signed token with embedded session data
-    return createSignedToken(sid);
+    return createSignedToken(sid, data.ip);
   } catch {
     return null;
   }
