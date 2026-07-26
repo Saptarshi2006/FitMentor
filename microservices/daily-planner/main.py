@@ -19,11 +19,11 @@ CF_MODEL = "@cf/meta/llama-4-scout-17b-16e-instruct"
 # Total AI token pool shared across all users
 TOTAL_AI_POOL = 10_000
 
-# Tier percentages of the total pool
-TIER_PERCENTAGE = {
-    "free": 0.5,     # 5,000 tokens/day
-    "pro": 0.7,      # 7,000 tokens/day
-    "premium": 1.0,  # 10,000 tokens/day
+# Tier multipliers for dynamic fair-share distribution
+TIER_MULTIPLIER = {
+    "free": 1.0,
+    "pro": 1.4,
+    "premium": 2.0,
 }
 
 r = None
@@ -64,30 +64,35 @@ def get_user_tier(cf_sub: str) -> str:
         logger.warning("Failed to lookup tier for %s: %s", cf_sub, e)
     return "free"
 
-def get_tier_limit(tier: str) -> int:
-    """Calculate per-user AI limit based on tier percentage of total pool."""
-    pct = TIER_PERCENTAGE.get(tier, TIER_PERCENTAGE["free"])
-    return int(TOTAL_AI_POOL * pct)
-
 def check_quota(cf_sub: str) -> bool:
     if r is None:
         return True
     today = date.today().isoformat()
     tier = get_user_tier(cf_sub)
-    user_limit = get_tier_limit(tier)
+    mult = TIER_MULTIPLIER.get(tier, 1.0)
 
-    pipe = r.pipeline()
-    pipe.incr(f"quota:planner:ai:{today}")
-    pipe.expire(f"quota:planner:ai:{today}", 86400)
-    pipe.incr(f"quota:planner:user:{cf_sub}:{today}")
-    pipe.expire(f"quota:planner:user:{cf_sub}:{today}", 86400)
-    global_count, _, user_count, _ = pipe.execute()
-    if global_count > TOTAL_AI_POOL:
-        logger.warning("Planner AI daily limit reached (%d)", global_count)
+    # Register as active user if first request today
+    was_new = r.set(f"quota:planner:seen:{cf_sub}:{today}", "1", ex=86400, nx=True)
+    if was_new:
+        r.incr(f"quota:planner:active:{tier}")
+        r.expire(f"quota:planner:active:{tier}", 86400)
+
+    # Read active counts
+    free = int(r.get("quota:planner:active:free") or "0")
+    pro = int(r.get("quota:planner:active:pro") or "0")
+    premium = int(r.get("quota:planner:active:premium") or "0")
+
+    # Compute dynamic fair-share limit
+    weighted = free * 1.0 + pro * 1.4 + premium * 2.0
+    user_limit = int(TOTAL_AI_POOL * mult / weighted) if weighted > 0 else TOTAL_AI_POOL
+
+    # Check + consume
+    used = int(r.get(f"quota:planner:user:{cf_sub}:{today}") or "0")
+    if used >= user_limit:
+        logger.warning("User %s (%s) daily AI limit reached (%d/%d)", cf_sub, tier, used, user_limit)
         return False
-    if user_count > user_limit:
-        logger.warning("User %s (%s plan) daily AI limit reached (%d/%d)", cf_sub, tier, user_count, user_limit)
-        return False
+    r.incr(f"quota:planner:user:{cf_sub}:{today}")
+    r.expire(f"quota:planner:user:{cf_sub}:{today}", 86400)
     return True
 
 def call_cf_ai(system: str, prompt: str, max_tokens: int = 2048) -> str:

@@ -3,6 +3,7 @@ pub mod auth;
 pub mod coach_log;
 pub mod coach_sessions;
 pub mod health;
+pub mod internal;
 pub mod logs;
 pub mod payments;
 pub mod user;
@@ -64,4 +65,6 @@ pub fn routes() -> Router<AppState> {
             "/v1/webhooks/polar",
             axum::routing::post(payments::webhook_handler),
         )
+        // Internal (server-to-server, behind API shared secret)
+        .route("/v1/internal/quota/check-and-consume", axum::routing::post(internal::check_and_consume))
 }

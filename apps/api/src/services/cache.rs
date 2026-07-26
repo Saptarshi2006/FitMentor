@@ -20,7 +20,7 @@ impl CacheService {
         }
     }
 
-    fn get_conn(&self) -> Option<redis::aio::ConnectionManager> {
+    pub fn get_conn(&self) -> Option<redis::aio::ConnectionManager> {
         self.conn.clone()
     }
 

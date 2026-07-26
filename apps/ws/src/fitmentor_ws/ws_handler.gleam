@@ -195,6 +195,9 @@ fn handle_authed(
       io.println("User " <> state.user_id <> " presence: " <> status)
       mist.continue(state)
     }
+    "chat" -> {
+      handle_chat(state, conn, msg)
+    }
     _ -> {
       let resp =
         "{\"type\":\"error\",\"code\":\"invalid_message\",\"message\":\"Unknown message type\"}"
@@ -202,6 +205,127 @@ fn handle_authed(
       mist.continue(state)
     }
   }
+}
+
+fn handle_chat(
+  state: WsState,
+  conn: WebsocketConnection,
+  msg: String,
+) -> mist.Next(WsState, WsMessage) {
+  let ai_body = extract_json_string(msg, "ai_request")
+  let last_message = extract_json_string(msg, "last_message")
+  let session_id = extract_json_string(msg, "session_id")
+  let tier = extract_json_string(msg, "tier")
+
+  case jwt.throttle_allowed(state.user_id, tier) {
+    False -> {
+      let _ = mist.send_text_frame(
+        conn,
+        "{\"type\":\"chat_error\",\"message\":\"Too many requests — please wait.\"}",
+      )
+      mist.continue(state)
+    }
+    True -> {
+      let api_url = jwt.api_url()
+      let api_key = jwt.api_shared_secret()
+      let quota_url = api_url <> "/v1/internal/quota/check-and-consume"
+      let quota_body =
+        "{\"tier\":\"" <> escape_json(tier) <> "\"}"
+
+      case jwt.http_post_authed(quota_url, quota_body, api_key, state.user_id) {
+        Error(_) -> {
+          let _ = mist.send_text_frame(
+            conn,
+            "{\"type\":\"chat_error\",\"message\":\"Quota service unavailable.\"}",
+          )
+          mist.continue(state)
+        }
+        Ok(#(_, quota_resp)) -> {
+          case extract_json_string(quota_resp, "allowed") {
+            "true" -> call_ai(state, conn, ai_body, last_message, session_id, api_url, api_key)
+            _ -> {
+              let limit = extract_json_string(quota_resp, "limit")
+              let used = extract_json_string(quota_resp, "used")
+              let err =
+                "{\"type\":\"chat_error\",\"message\":\"AI daily limit reached ("
+                <> used
+                <> "/"
+                <> limit
+                <> " tokens).\"}"
+              let _ = mist.send_text_frame(conn, err)
+              mist.continue(state)
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+fn call_ai(
+  state: WsState,
+  conn: WebsocketConnection,
+  ai_body: String,
+  last_message: String,
+  session_id: String,
+  api_url: String,
+  api_key: String,
+) -> mist.Next(WsState, WsMessage) {
+  let cf_account = jwt.cf_account_id()
+  let cf_token = jwt.cf_api_token()
+  let ai_url =
+    "https://api.cloudflare.com/client/v4/accounts/"
+    <> cf_account
+    <> "/ai/run/@cf/meta/llama-4-scout-17b-16e-instruct"
+
+  case jwt.http_post_bearer(ai_url, ai_body, cf_token) {
+    Error(_) -> {
+      let _ = mist.send_text_frame(
+        conn,
+        "{\"type\":\"chat_error\",\"message\":\"AI unavailable — try again.\"}",
+      )
+      mist.continue(state)
+    }
+    Ok(#(_, ai_resp)) -> {
+      let content =
+        case extract_json_string(ai_resp, "content") {
+          "" -> extract_json_string(ai_resp, "response")
+          c -> c
+        }
+      let safe = escape_json(content)
+      let resp = "{\"type\":\"chat_response\",\"content\":\"" <> safe <> "\"}"
+      let _ = mist.send_text_frame(conn, resp)
+
+      // Coach log (fire and forget)
+      let log_body =
+        "{\"user_message\":\""
+        <> escape_json(last_message)
+        <> "\",\"reply\":\""
+        <> safe
+        <> "\",\"container_tag\":\""
+        <> state.user_id
+        <> "\",\"session_id\":\""
+        <> escape_json(session_id)
+        <> "\"}"
+      let _ = jwt.http_post_authed(
+        api_url <> "/v1/coach/log",
+        log_body,
+        api_key,
+        state.user_id,
+      )
+
+      mist.continue(state)
+    }
+  }
+}
+
+fn escape_json(s: String) -> String {
+  s
+  |> string.replace("\\", "\\\\")
+  |> string.replace("\"", "\\\"")
+  |> string.replace("\n", "\\n")
+  |> string.replace("\r", "\\r")
+  |> string.replace("\t", "\\t")
 }
 
 /// Extract a string value from a flat JSON object: {"key":"value"}

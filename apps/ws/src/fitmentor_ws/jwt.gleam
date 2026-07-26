@@ -31,9 +31,58 @@ fn erl_now_seconds() -> Int
 @external(erlang, "fitmentor_ws@jwt_ffi", "get_env")
 fn erl_get_env(key: String) -> String
 
+@external(erlang, "fitmentor_ws@jwt_ffi", "http_post")
+fn erl_http_post(url: String, body: String, headers: List(#(String, String))) -> Result(#(Int, String), String)
+
+@external(erlang, "fitmentor_ws@jwt_ffi", "throttle_init")
+pub fn throttle_init() -> Nil
+
+@external(erlang, "fitmentor_ws@jwt_ffi", "throttle_check")
+fn erl_throttle_check(user_id: String, minute_bucket: Int, limit: Int) -> Int
+
+@external(erlang, "fitmentor_ws@jwt_ffi", "current_minute_bucket")
+fn erl_current_minute_bucket() -> Int
+
 /// Read CF_JWKS_URL; empty string when unset.
 pub fn jwks_url() -> String {
   erl_get_env("CF_JWKS_URL")
+}
+
+pub fn api_url() -> String {
+  erl_get_env("API_URL")
+}
+
+pub fn api_shared_secret() -> String {
+  erl_get_env("API_SHARED_SECRET")
+}
+
+pub fn cf_account_id() -> String {
+  erl_get_env("CF_ACCOUNT_ID")
+}
+
+pub fn cf_api_token() -> String {
+  erl_get_env("CF_API_TOKEN")
+}
+
+pub fn throttle_allowed(user_id: String, tier: String) -> Bool {
+  let limit = case tier {
+    "premium" -> 20
+    "pro" -> 10
+    _ -> 5
+  }
+  erl_throttle_check(user_id, erl_current_minute_bucket(), limit) == 1
+}
+
+pub fn http_post_json(url: String, body: String) -> Result(#(Int, String), String) {
+  erl_http_post(url, body, [])
+}
+
+pub fn http_post_authed(url: String, body: String, api_key: String, user_id: String) -> Result(#(Int, String), String) {
+  erl_http_post(url, body, [#("x-api-key", api_key), #("x-user-id", user_id)])
+}
+
+pub fn http_post_bearer(url: String, body: String, token: String) -> Result(#(Int, String), String) {
+  erl_http_post(url, body, [#("authorization", "Bearer " <> token)])
 }
 
 fn b64url_decode(s: String) -> Result(BitArray, Nil) {

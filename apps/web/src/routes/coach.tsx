@@ -1,8 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MobileShell } from "@/components/MobileShell";
-import { askCoach } from "@/services/coach-functions";
 import { useProfile, calcTargets } from "@/utils/profile";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -12,6 +10,8 @@ import ReactMarkdown from "react-markdown";
 import { getClient } from "@/lib/graphql/client";
 import { COACH_SESSIONS_QUERY, COACH_SESSION_QUERY } from "@/lib/graphql/queries";
 import { CREATE_COACH_SESSION_MUTATION, DELETE_COACH_SESSION_MUTATION } from "@/lib/graphql/mutations";
+import { askCoach } from "@/services/coach-functions";
+import { useServerFn } from "@tanstack/react-start";
 
 export const Route = createFileRoute("/coach")({
   head: () => ({ meta: [{ title: "AI Coach — FitMentor" }] }),
@@ -34,6 +34,37 @@ const STARTERS = [
   "Is my workout plan good?",
 ];
 
+const WS_URL = import.meta.env.VITE_WS_URL || "wss://fitmentor-ws.fly.dev/ws";
+
+function buildSystemPrompt(p: Record<string, any> | undefined): string {
+  if (!p) return "User has not completed onboarding yet.";
+  const h = p.healthConditions?.length ? `- Health conditions: ${p.healthConditions.join(", ")}` : "";
+  return `User profile:
+- Name: ${p.name ?? "Friend"}
+- Age: ${p.age}, Gender: ${p.gender}
+- Height: ${p.heightCm} cm, Weight: ${p.weightKg} kg
+- Goal: ${p.goal}, Experience: ${p.experience}
+- Trains: ${p.place} (${p.daysPerWeek} days/week)
+- Diet: ${p.diet}, Food budget: ₹${p.budgetPerDay}/day
+${h}
+- Daily targets: ${p.calories} kcal, ${p.protein} g protein`;
+}
+
+function buildChatMessages(messages: Msg[], profile: Record<string, any> | undefined): { role: string; content: string }[] {
+  const system = `You are FitMentor, a warm, no-nonsense AI fitness coach for Indian gym beginners and students.
+Rules:
+- Be concise. Use short paragraphs and bullet points. Never write essays.
+- Use simple words. No fitness jargon unless you explain it.
+- Suggest affordable Indian foods (dal, eggs, paneer, soya, milk, chicken, rice, roti).
+- Default currency: INR. Default units: kg, cm, ml.
+- Never recommend extreme diets or unsafe lifts. Suggest seeing a doctor for medical issues.
+- Don't push supplements. Whey is optional, not required.
+- Always end with one clear next step the user can do today.
+
+${buildSystemPrompt(profile)}`;
+  return [{ role: "system", content: system }, ...messages.map(m => ({ role: m.role, content: m.content }))];
+}
+
 function Coach() {
   const ask = useServerFn(askCoach);
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -43,8 +74,10 @@ function Coach() {
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sessionsLoading, setSessionsLoading] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const { profile } = useProfile();
+  const [wsConnected, setWsConnected] = useState(false);
 
   const loadSessions = useCallback(async () => {
     setSessionsLoading(true);
@@ -63,6 +96,39 @@ function Coach() {
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
+
+  useEffect(() => {
+    const cfToken = document.cookie.split("; ").find(c => c.startsWith("CF_Authorization="))?.split("=")[1];
+    if (!cfToken) return;
+    const ws = new WebSocket(`${WS_URL}?token=${cfToken}`);
+    ws.onopen = () => setWsConnected(true);
+    ws.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.type === "chat_response") {
+          setMessages((prev) => {
+            const last = prev[prev.length - 1];
+            if (last?.role === "assistant") {
+              const updated = [...prev];
+              updated[updated.length - 1] = { ...last, content: data.content };
+              return updated;
+            }
+            return [...prev, { role: "assistant", content: data.content }];
+          });
+          setLoading(false);
+          loadSessions();
+        }
+        if (data.type === "chat_error") {
+          toast.error(data.message);
+          setLoading(false);
+        }
+      } catch {}
+    };
+    ws.onclose = () => setWsConnected(false);
+    ws.onerror = () => setWsConnected(false);
+    wsRef.current = ws;
+    return () => ws.close();
+  }, [loadSessions]);
 
   async function switchSession(id: string) {
     try {
@@ -128,6 +194,20 @@ function Coach() {
     setMessages(newMsgs);
     setInput("");
     setLoading(true);
+
+    const ws = wsRef.current;
+    if (ws && wsConnected && ws.readyState === WebSocket.OPEN) {
+      const aiMessages = buildChatMessages(newMsgs, profileWithTargets);
+      ws.send(JSON.stringify({
+        type: "chat",
+        ai_request: JSON.stringify({ messages: aiMessages }),
+        last_message: q,
+        session_id: sid,
+        tier: "free",
+      }));
+      return;
+    }
+
     try {
       const res = await ask({
         data: { session_id: sid, messages: newMsgs, profile: profileWithTargets },
