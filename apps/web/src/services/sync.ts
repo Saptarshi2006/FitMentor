@@ -89,6 +89,31 @@ export const syncProfile = createServerFn({ method: "POST" })
     return { ok: true } as const;
   });
 
+export const syncWorkoutDone = createServerFn({ method: "POST" })
+  .validator((d: unknown) => d as { workoutDone: boolean })
+  .handler(async ({ data: { workoutDone } }) => {
+    const raw = getCookie(SESSION_COOKIE);
+    if (!raw) return { ok: false };
+    const sid = await extractSessionId(raw);
+    if (!sid) return { ok: false };
+    const session = await getSession(sid);
+    if (!session) return { ok: false };
+    const apiUrl = process.env.API_URL || "https://16-112-132-239.sslip.io";
+    const apiKey = process.env.API_SHARED_SECRET;
+    if (!apiKey) return { ok: false };
+    const res = await fetch(`${apiUrl}/v1/logs/today`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Api-Key": apiKey,
+        "X-User-Id": session.sub,
+        "X-User-Email": session.email,
+      },
+      body: JSON.stringify({ workout_done: workoutDone }),
+    });
+    return { ok: res.ok };
+  });
+
 export const fetchSubscription = createServerFn({ method: "POST" }).handler(async () => {
   const raw = getCookie(SESSION_COOKIE);
   if (!raw) return { data: { subscription: null } };

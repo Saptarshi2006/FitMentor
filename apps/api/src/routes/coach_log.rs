@@ -11,6 +11,7 @@ pub struct CoachLogRequest {
     pub reply: String,
     pub container_tag: String,
     pub messages: Option<serde_json::Value>,
+    pub session_id: Option<String>,
 }
 
 /// POST /v1/coach/log — store container_tag + messages in Postgres, forward conversation to Python ingest.
@@ -41,6 +42,25 @@ pub async fn log(
     .execute(&state.pool)
     .await?;
 
+    // Update chat_sessions with the reply
+    if let Some(sid) = &req.session_id {
+        if !sid.is_empty() {
+            let mut msgs = messages.as_array().cloned().unwrap_or_default();
+            msgs.push(serde_json::json!({
+                "role": "assistant",
+                "content": &req.reply,
+            }));
+            let _ = sqlx::query(
+                "UPDATE chat_sessions SET messages = $1, updated_at = NOW() WHERE id = $2::uuid AND user_id = $3",
+            )
+            .bind(serde_json::Value::Array(msgs))
+            .bind(sid)
+            .bind(&user_id)
+            .execute(&state.pool)
+            .await;
+        }
+    }
+
     let event = serde_json::json!({
         "user_id": &user_id,
         "container_tag": &req.container_tag,
@@ -48,6 +68,7 @@ pub async fn log(
         "user_message": &req.user_message,
         "reply": &req.reply,
         "messages": &req.messages,
+        "session_id": &req.session_id,
     });
 
     // Publish to Redis Streams for other services to consume

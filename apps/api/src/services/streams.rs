@@ -35,6 +35,7 @@ pub struct CoachLogEvent {
     pub reply: String,
     pub tier: String,
     pub messages: serde_json::Value,
+    pub session_id: Option<String>,
 }
 
 pub async fn consume_coach_logs(
@@ -106,6 +107,27 @@ async fn process_coach_log(
     .bind(messages)
     .execute(pool)
     .await;
+
+    if let Some(sid) = &event.session_id {
+        if !sid.is_empty() {
+            let mut msgs = messages
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+            msgs.push(serde_json::json!({
+                "role": "assistant",
+                "content": event.reply,
+            }));
+            let _ = sqlx::query(
+                "UPDATE chat_sessions SET messages = $1, updated_at = NOW() WHERE id = $2::uuid AND user_id = $3",
+            )
+            .bind(serde_json::Value::Array(msgs))
+            .bind(sid)
+            .bind(&event.user_id)
+            .execute(pool)
+            .await;
+        }
+    }
 
     let iu = ingest_url.to_string();
     let content = format!("User: {}\nCoach: {}", event.user_message, event.reply);

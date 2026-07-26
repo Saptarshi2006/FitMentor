@@ -29,5 +29,5 @@ export function isPremium(): boolean {
 }
 
 export function getPlanName(tier: PlanTier): string {
-  return tier === "pro" ? "Pro" : tier === "premium" ? "Premium" : "Free";
+  return tier === "pro" ? "Basic" : tier === "premium" ? "Elite" : "Free";
 }

@@ -1,9 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { MobileShell } from "@/components/MobileShell";
 import { useProfile } from "@/utils/profile";
 import { EXERCISE_LIBRARY, type WorkoutDay } from "@/utils/workouts";
 import { saveLog, ensureToday } from "@/utils/habits";
+import { syncWorkoutDone } from "@/services/sync";
 import { Button } from "@/components/ui/button";
 import { Check, ChevronRight, Clock, Dumbbell, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -23,6 +25,7 @@ function Workouts() {
   const [openIdx, setOpenIdx] = useState<number | null>(0);
   const [workoutDone, setWorkoutDone] = useState(() => ensureToday().workoutDone);
   const { profile } = useProfile();
+  const sync = useServerFn(syncWorkoutDone);
 
   useEffect(() => {
     setFetchError(false);
@@ -119,6 +122,7 @@ function Workouts() {
                         const log = ensureToday();
                         saveLog({ ...log, workoutDone: true });
                         setWorkoutDone(true);
+                        sync({ workoutDone: true });
                         toast.success("Workout logged!");
                       }}
                     >

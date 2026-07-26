@@ -48,7 +48,7 @@ const PLANS: {
 }[] = [
   {
     tier: "pro",
-    name: "Pro",
+    name: "Basic",
     price: 99,
     period: "month",
     features: ["Unlimited AI Coach", "Custom meal plans", "Advanced analytics"],
@@ -56,10 +56,10 @@ const PLANS: {
   },
   {
     tier: "premium",
-    name: "Premium",
+    name: "Elite",
     price: 299,
     period: "month",
-    features: ["Everything in Premium", "Form analyzer", "Photo macros", "Progress reports"],
+    features: ["Everything in Basic", "Form analyzer", "Photo macros", "Progress reports"],
     accent: true,
   },
 ];
