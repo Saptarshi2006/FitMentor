@@ -13,7 +13,7 @@ import {
   type PlanTier,
 } from "@/utils/subscription";
 import { fetchSubscription } from "@/services/sync";
-import { proxyCheckout } from "@/services/api-proxy.server";
+import { proxyCheckout } from "@/services/api-proxy";
 import { Button } from "@/components/ui/button";
 import {
   Crown,

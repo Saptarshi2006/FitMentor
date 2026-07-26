@@ -1,4 +1,4 @@
-import { proxyGraphQL } from "@/services/api-proxy.server";
+import { proxyGraphQL } from "@/services/api-proxy";
 
 export function getClient() {
   return {
