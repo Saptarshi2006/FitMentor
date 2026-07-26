@@ -34,7 +34,7 @@ export const fetchProfile = createServerFn({ method: "GET" }).handler(async () =
     if (diff < 1000) return null;
   }
 
-  return profile as Profile;
+  return profile as unknown as Profile;
 });
 
 export const syncProfile = createServerFn({ method: "POST" })

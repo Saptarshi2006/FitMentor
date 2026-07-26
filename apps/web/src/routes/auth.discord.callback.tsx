@@ -30,8 +30,6 @@ function DiscordCallback() {
     exchangeDiscordCode({ data: { code, state } }).then((result) => {
       if (result.ok) {
         window.location.href = "/dashboard";
-      } else if (result.error === "user_exists") {
-        setError("An account already exists with this Discord account");
       } else {
         setError(result.error || "Authentication failed");
       }
