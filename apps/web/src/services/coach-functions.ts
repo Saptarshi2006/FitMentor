@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { getCookie } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { chatCompletion, type ChatMessage } from "./ai-gateway.server";
-import { getSession } from "@/utils/session";
+import { getSession, extractSessionId } from "@/utils/session";
 
 const SESSION_COOKIE = "fitmentor_session";
 
@@ -69,7 +69,7 @@ Rules:
 ${profileBlock}`;
 
     const sid = getCookie(SESSION_COOKIE);
-    const session = sid ? await getSession(sid) : null;
+    const session = sid ? await extractSessionId(sid).then((id) => (id ? getSession(id) : null)) : null;
 
     const messages: ChatMessage[] = [{ role: "system", content: system }, ...data.messages];
     const reply = await chatCompletion({ messages, userId: session?.sub });

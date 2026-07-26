@@ -2,7 +2,7 @@ import "./utils/error-capture";
 
 import { consumeLastCapturedError } from "./utils/error-capture";
 import { renderErrorPage } from "./utils/error-page";
-import { deriveKey } from "./utils/session";
+import { deriveKey, extractSessionId } from "./utils/session";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -59,7 +59,9 @@ async function getUserSub(request: Request, env: any): Promise<string | null> {
   try {
     const kv = env?.fitmentor_sessions;
     if (!kv) return null;
-    const key = await deriveKey(raw);
+    const sid = await extractSessionId(raw);
+    if (!sid) return null;
+    const key = await deriveKey(sid);
     const data = await kv.get(key);
     if (!data) return null;
     return JSON.parse(data).sub ?? null;
@@ -91,7 +93,9 @@ async function getUserSession(request: Request, env: any): Promise<{ sub: string
   try {
     const kv = env?.fitmentor_sessions;
     if (!kv) return null;
-    const key = await deriveKey(raw);
+    const sid = await extractSessionId(raw);
+    if (!sid) return null;
+    const key = await deriveKey(sid);
     const data = await kv.get(key);
     if (!data) return null;
     const session = JSON.parse(data);
@@ -225,7 +229,10 @@ async function handleValidateSession(request: Request, env: any): Promise<Respon
     const raw = parseCookie(request.headers.get("cookie"), "fitmentor_session");
     if (!raw) return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
 
-    const key = await deriveKey(raw);
+    const sid = await extractSessionId(raw);
+    if (!sid) return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
+
+    const key = await deriveKey(sid);
     const data = await kv.get(key);
     if (!data) return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
 

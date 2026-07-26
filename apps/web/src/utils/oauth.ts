@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getCookie, setResponseHeader } from "@tanstack/react-start/server";
-import { getSession, createSession, deleteSession, renewSession, deleteRememberToken } from "@/utils/session";
+import { getSession, createSession, deleteSession, renewSession, deleteRememberToken, extractSessionId } from "@/utils/session";
 import { useState, useEffect } from "react";
 
 interface DiscordUser {
@@ -23,16 +23,18 @@ function clearSessionCookie() {
 }
 
 export const checkSession = createServerFn({ method: "GET" }).handler(async () => {
-  const sid = getCookie(SESSION_COOKIE);
-  if (sid) {
-    const session = await getSession(sid);
-    if (session) return { ok: true } as const;
-
-    // Session expired — try renewing via remember token in KV
-    const newSid = await renewSession(sid);
-    if (newSid) {
-      setSessionCookie(newSid);
-      return { ok: true } as const;
+  const raw = getCookie(SESSION_COOKIE);
+  if (raw) {
+    const sid = await extractSessionId(raw);
+    if (sid) {
+      const session = await getSession(sid);
+      if (session) return { ok: true } as const;
+      // Session expired — try renewing via remember token in KV
+      const newSid = await renewSession(sid);
+      if (newSid) {
+        setSessionCookie(newSid);
+        return { ok: true } as const;
+      }
     }
   }
 
@@ -40,7 +42,9 @@ export const checkSession = createServerFn({ method: "GET" }).handler(async () =
 });
 
 export const getCurrentUser = createServerFn({ method: "GET" }).handler(async () => {
-  const sid = getCookie(SESSION_COOKIE);
+  const raw = getCookie(SESSION_COOKIE);
+  if (!raw) return null;
+  const sid = await extractSessionId(raw);
   if (!sid) return null;
   const session = await getSession(sid);
   if (!session) return null;
@@ -125,22 +129,28 @@ export function logout() {
 }
 
 export const clearSession = createServerFn({ method: "POST" }).handler(async () => {
-  const sid = getCookie(SESSION_COOKIE);
-  if (sid) {
-    const session = await getSession(sid);
-    if (session?.rememberToken) await deleteRememberToken(session.rememberToken);
-    await deleteSession(sid);
+  const raw = getCookie(SESSION_COOKIE);
+  if (raw) {
+    const sid = await extractSessionId(raw);
+    if (sid) {
+      const session = await getSession(sid);
+      if (session?.rememberToken) await deleteRememberToken(session.rememberToken);
+      await deleteSession(sid);
+    }
   }
   clearSessionCookie();
   return { ok: true } as const;
 });
 
 export const forgetDevice = createServerFn({ method: "POST" }).handler(async () => {
-  const sid = getCookie(SESSION_COOKIE);
-  if (sid) {
-    const session = await getSession(sid);
-    if (session?.rememberToken) await deleteRememberToken(session.rememberToken);
-    await deleteSession(sid);
+  const raw = getCookie(SESSION_COOKIE);
+  if (raw) {
+    const sid = await extractSessionId(raw);
+    if (sid) {
+      const session = await getSession(sid);
+      if (session?.rememberToken) await deleteRememberToken(session.rememberToken);
+      await deleteSession(sid);
+    }
   }
   clearSessionCookie();
   return { ok: true } as const;

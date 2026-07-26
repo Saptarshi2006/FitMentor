@@ -1,14 +1,16 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getCookie } from "@tanstack/react-start/server";
 import type { Profile } from "@fitmentor/shared";
-import { getSession } from "@/utils/session";
+import { getSession, extractSessionId } from "@/utils/session";
 
 const SESSION_COOKIE = "fitmentor_session";
 
 export const fetchProfile = createServerFn({ method: "GET" }).handler(async () => {
   const raw = getCookie(SESSION_COOKIE);
   if (!raw) return null;
-  const session = await getSession(raw);
+  const sid = await extractSessionId(raw);
+  if (!sid) return null;
+  const session = await getSession(sid);
   if (!session) return null;
   const apiUrl = process.env.API_URL || "https://16-112-132-239.sslip.io";
   const apiKey = process.env.API_SHARED_SECRET;
@@ -40,7 +42,9 @@ export const syncProfile = createServerFn({ method: "POST" })
   .handler(async ({ data: profile }) => {
     const raw = getCookie(SESSION_COOKIE);
     if (!raw) return { ok: false, error: "no_session" } as const;
-    const session = await getSession(raw);
+    const sid = await extractSessionId(raw);
+    if (!sid) return { ok: false, error: "no_session" } as const;
+    const session = await getSession(sid);
     if (!session) return { ok: false, error: "invalid_session" } as const;
 
     const apiUrl = process.env.API_URL || "https://16-112-132-239.sslip.io";
@@ -88,7 +92,9 @@ export const syncProfile = createServerFn({ method: "POST" })
 export const fetchSubscription = createServerFn({ method: "POST" }).handler(async () => {
   const raw = getCookie(SESSION_COOKIE);
   if (!raw) return { data: { subscription: null } };
-  const session = await getSession(raw);
+  const sid = await extractSessionId(raw);
+  if (!sid) return { data: { subscription: null } };
+  const session = await getSession(sid);
   if (!session) return { data: { subscription: null } };
   const apiKey = process.env.API_SHARED_SECRET;
   if (!apiKey) return { data: { subscription: null } };
