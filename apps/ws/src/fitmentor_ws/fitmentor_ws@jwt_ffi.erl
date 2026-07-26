@@ -70,9 +70,13 @@ http_post(Url, Body, Headers) ->
 
 %% ETS throttle table — in-memory rate limiting per user per minute
 throttle_init() ->
-  case ets:info(fitmentor_throttle) of
-    undefined -> ets:new(fitmentor_throttle, [public, named_table, set, write_concurrency, {read_concurrency, true}]);
-    _ -> ok
+  try
+    case ets:info(fitmentor_throttle) of
+      undefined -> ets:new(fitmentor_throttle, [public, named_table, set, write_concurrency, {read_concurrency, true}]);
+      _ -> ok
+    end
+  catch
+    _:_ -> ok
   end.
 
 %% Current unix time in minutes (throttle bucket key).
