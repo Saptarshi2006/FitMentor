@@ -263,6 +263,17 @@ async fn run_migrations(pool: &PgPool) {
     sqlx::query(r#"CREATE UNIQUE INDEX IF NOT EXISTS idx_form_advice_user_date ON form_advice(user_id, date)"#)
         .execute(pool).await.expect("failed to create form_advice index");
 
+    sqlx::query("DELETE FROM coach_logs WHERE messages = '[]' OR messages IS NULL")
+        .execute(pool)
+        .await
+        .expect("failed to clean old coach_logs");
+    sqlx::query(
+        r#"CREATE UNIQUE INDEX IF NOT EXISTS idx_coach_logs_user_container ON coach_logs(user_id, container_tag)"#,
+    )
+    .execute(pool)
+    .await
+    .expect("failed to add coach_logs unique index");
+
     tracing::info!("migrations complete");
 }
 

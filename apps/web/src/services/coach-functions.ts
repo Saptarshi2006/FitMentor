@@ -108,6 +108,7 @@ ${profileBlock}`;
             "X-User-Email": session.email,
           },
           body: JSON.stringify({
+            messages: data.messages,
             user_message: lastUserMsg?.content ?? "",
             reply,
             container_tag: session.sub,

@@ -10,9 +10,10 @@ pub struct CoachLogRequest {
     pub user_message: String,
     pub reply: String,
     pub container_tag: String,
+    pub messages: Option<serde_json::Value>,
 }
 
-/// POST /v1/coach/log — store container_tag in Postgres, forward conversation to Python ingest.
+/// POST /v1/coach/log — store container_tag + messages in Postgres, forward conversation to Python ingest.
 pub async fn log(
     State(state): State<AppState>,
     AuthUser { user_id, .. }: AuthUser,
@@ -27,14 +28,16 @@ pub async fn log(
     .await?
     .unwrap_or_else(|| "free".to_string());
 
+    let messages = req.messages.unwrap_or(serde_json::json!([]));
     sqlx::query(
         "INSERT INTO coach_logs (user_id, container_tag, messages)
          VALUES ($1, $2, $3)
-         ON CONFLICT DO NOTHING",
+         ON CONFLICT (user_id, container_tag)
+         DO UPDATE SET messages = $3",
     )
     .bind(&user_id)
     .bind(&req.container_tag)
-    .bind(&serde_json::json!([]))
+    .bind(&messages)
     .execute(&state.pool)
     .await?;
 

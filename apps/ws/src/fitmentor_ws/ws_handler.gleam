@@ -216,6 +216,7 @@ fn handle_chat(
   let last_message = extract_json_string(msg, "last_message")
   let session_id = extract_json_string(msg, "session_id")
   let tier = extract_json_string(msg, "tier")
+  let msgs = extract_json_string(msg, "messages")
 
   case jwt.throttle_allowed(state.user_id, tier) {
     False -> {
@@ -242,7 +243,7 @@ fn handle_chat(
         }
         Ok(#(_, quota_resp)) -> {
           case extract_json_string(quota_resp, "allowed") {
-            "true" -> call_ai(state, conn, ai_body, last_message, session_id, api_url, api_key)
+            "true" -> call_ai(state, conn, ai_body, msgs, last_message, session_id, api_url, api_key)
             _ -> {
               let limit = extract_json_string(quota_resp, "limit")
               let used = extract_json_string(quota_resp, "used")
@@ -266,6 +267,7 @@ fn call_ai(
   state: WsState,
   conn: WebsocketConnection,
   ai_body: String,
+  msgs: String,
   last_message: String,
   session_id: String,
   api_url: String,
@@ -298,7 +300,9 @@ fn call_ai(
 
       // Coach log (fire and forget)
       let log_body =
-        "{\"user_message\":\""
+        "{\"messages\":"
+        <> msgs
+        <> ",\"user_message\":\""
         <> escape_json(last_message)
         <> "\",\"reply\":\""
         <> safe

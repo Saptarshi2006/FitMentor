@@ -201,6 +201,7 @@ function Coach() {
       ws.send(JSON.stringify({
         type: "chat",
         ai_request: JSON.stringify({ messages: aiMessages }),
+        messages: JSON.stringify(newMsgs),
         last_message: q,
         session_id: sid,
         tier: "free",
