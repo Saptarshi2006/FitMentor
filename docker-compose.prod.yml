@@ -1,0 +1,71 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://fitmentor:fitmentor123@fitmentor-db.czgo408gk3ra.ap-south-2.rds.amazonaws.com/fitmentor?sslmode=require}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      RUST_LOG: ${RUST_LOG:-info}
+      PORT: ${PORT:-3000}
+      APP_URL: ${APP_URL:-https://fitmentor-7lx.pages.dev}
+      API_URL: ${API_URL:-https://16-112-132-239.sslip.io}
+      CF_ACCOUNT_ID: ${CF_ACCOUNT_ID:-10112875ad4b991b430e4a8ed79124a7}
+      CF_API_TOKEN: ${CF_API_TOKEN:-}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-1529070006346711182}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      API_SHARED_SECRET: ${API_SHARED_SECRET:-}
+      SUPERMEMORY_API_KEY: ${SUPERMEMORY_API_KEY:-}
+      POLAR_ACCESS_TOKEN: ${POLAR_ACCESS_TOKEN:-}
+      POLAR_WEBHOOK_SECRET: ${POLAR_WEBHOOK_SECRET:-}
+      POLAR_PREMIUM_PRODUCT_ID: ${POLAR_PREMIUM_PRODUCT_ID:-}
+      POLAR_PREMIUM_PRICE_ID: ${POLAR_PREMIUM_PRICE_ID:-}
+      POLAR_PRO_PRODUCT_ID: ${POLAR_PRO_PRODUCT_ID:-}
+      POLAR_PRO_PRICE_ID: ${POLAR_PRO_PRICE_ID:-}
+      DB_PASSWORD: ${DB_PASSWORD:-}
+      RDS_ENDPOINT: ${RDS_ENDPOINT:-}
+      ELASTICACHE_ENDPOINT: ${ELASTICACHE_ENDPOINT:-}
+    restart: unless-stopped
+    depends_on:
+      - redis
+
+  ws:
+    build:
+      context: apps/ws
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      REDIS_URL: redis://redis:6379
+    restart: unless-stopped
+
+  ingest:
+    build:
+      context: .
+      dockerfile: apps/ingest-python/Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      SUPERMEMORY_API_KEY: ${SUPERMEMORY_API_KEY:-}
+    restart: unless-stopped
+
+  planner:
+    build:
+      context: .
+      dockerfile: microservices/daily-planner/Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-}
+      CF_ACCOUNT_ID: ${CF_ACCOUNT_ID:-}
+      CF_API_TOKEN: ${CF_API_TOKEN:-}
+      PORT: "8002"
+      MODE: "http"
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
