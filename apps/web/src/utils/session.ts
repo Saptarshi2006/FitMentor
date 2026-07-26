@@ -8,8 +8,12 @@ function getCloudflareEnv(): Record<string, unknown> | null {
     const key = Symbol.for("tanstack-start:event-storage");
     const store = (globalThis as any)[key]?.getStore?.();
     const event: any = store?.h3Event;
-    const fromAls = event?.req?.runtime?.cloudflare?.env;
-    if (fromAls) return fromAls;
+    // Try event.context.cloudflare.env (h3 event context)
+    if (event?.context?.cloudflare?.env) return event.context.cloudflare.env;
+    // Try event.context.env (direct env binding)
+    if (event?.context?.env) return event.context.env;
+    // Try event.req.runtime.cloudflare.env (augmentReq path)
+    if (event?.req?.runtime?.cloudflare?.env) return event.req.runtime.cloudflare.env;
   } catch {}
   // 2. Try globalThis.__cf_env (set from request.runtime in server.ts fetch handler)
   const fromGlobal = (globalThis as any).__cf_env;
@@ -105,10 +109,10 @@ function base64urlDecode(str: string): ArrayBuffer {
   return buf.buffer;
 }
 
-async function createSignedToken(sid: string, sub: string, email: string): Promise<string> {
+async function createSignedToken(sid: string): Promise<string> {
   try {
     const secret = getSecret();
-    const payload = JSON.stringify({ sid, sub, email, exp: Math.floor(Date.now() / 1000) + TOKEN_MAX_AGE });
+    const payload = JSON.stringify({ sid, exp: Math.floor(Date.now() / 1000) + TOKEN_MAX_AGE });
     const payloadB64 = base64urlEncode(new TextEncoder().encode(payload).buffer);
     const sig = await hmacSign(payloadB64, secret);
     return `${payloadB64}.${sig}`;
@@ -119,8 +123,6 @@ async function createSignedToken(sid: string, sub: string, email: string): Promi
 
 export interface SignedTokenPayload {
   sid: string;
-  sub: string;
-  email: string;
   exp: number;
 }
 
@@ -134,7 +136,7 @@ async function verifySignedToken(token: string): Promise<SignedTokenPayload | nu
     if (!(await hmacVerify(payloadB64, sig, secret))) return null;
     const payload = JSON.parse(new TextDecoder().decode(base64urlDecode(payloadB64)));
     if (typeof payload.exp !== "number" || payload.exp < Math.floor(Date.now() / 1000)) return null;
-    if (typeof payload.sid !== "string" || typeof payload.sub !== "string") return null;
+    if (typeof payload.sid !== "string") return null;
     return payload as SignedTokenPayload;
   } catch {
     return null;
@@ -142,20 +144,43 @@ async function verifySignedToken(token: string): Promise<SignedTokenPayload | nu
 }
 
 /**
- * Extract session data directly from the signed token (no KV needed).
- * Returns { sub, email, sid } or null.
+ * Extract session data from the signed token and look up in KV.
+ * Falls back to legacy raw sid with KV lookup.
  */
 export async function resolveSessionFromToken(cookieValue: string): Promise<{ sub: string; email: string } | null> {
   if (!cookieValue) return null;
-  if (!cookieValue.includes(".")) return null; // legacy raw sid — can't resolve without KV
-  const payload = await verifySignedToken(cookieValue);
-  if (!payload) return null;
-  return { sub: payload.sub, email: payload.email };
+
+  let sid: string | null = null;
+  if (cookieValue.includes(".")) {
+    const payload = await verifySignedToken(cookieValue);
+    if (!payload) return null;
+    sid = payload.sid;
+  } else {
+    sid = cookieValue; // legacy raw sid
+  }
+
+  // Look up session data from KV
+  const kv = getKV();
+  if (!kv) return null;
+  try {
+    const key = await deriveKey(sid);
+    const raw = await kv.get(key);
+    if (raw) {
+      const data = JSON.parse(raw);
+      return { sub: data.sub, email: data.email };
+    }
+    // Fallback: try raw sid
+    const rawFallback = await kv.get(sid);
+    if (rawFallback) {
+      const data = JSON.parse(rawFallback);
+      return { sub: data.sub, email: data.email };
+    }
+  } catch {}
+  return null;
 }
 
 /**
  * Extract the raw session ID from any cookie value.
- * For signed tokens, returns the sid. For legacy raw sids, returns as-is.
  */
 export async function extractSessionId(cookieValue: string): Promise<string | null> {
   if (!cookieValue) return null;
@@ -180,7 +205,7 @@ export async function createSession(data: SessionData): Promise<string | null> {
       expirationTtl: REMEMBER_TTL,
     });
     // Return a signed token with embedded session data
-    return createSignedToken(sid, data.sub, data.email);
+    return createSignedToken(sid);
   } catch {
     return null;
   }
@@ -230,7 +255,7 @@ export async function renewSession(sid: string): Promise<string | null> {
     await kv.put(newKey, JSON.stringify({ ...remData, rememberToken, createdAt: Date.now() }), {
       expirationTtl: SESSION_TTL,
     });
-    return createSignedToken(newSid, remData.sub, remData.email);
+    return createSignedToken(newSid);
   } catch {
     return null;
   }
