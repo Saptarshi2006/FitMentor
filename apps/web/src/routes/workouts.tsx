@@ -21,6 +21,7 @@ function Workouts() {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(false);
   const [openIdx, setOpenIdx] = useState<number | null>(0);
+  const [workoutDone, setWorkoutDone] = useState(() => ensureToday().workoutDone);
   const { profile } = useProfile();
 
   useEffect(() => {
@@ -107,16 +108,23 @@ function Workouts() {
                       {ex.alt && <p className="mt-1 text-xs text-muted-foreground">↔ Alt: {ex.alt}</p>}
                     </div>
                   ))}
-                  <Button
-                    className="mt-2 w-full bg-gradient-hero text-primary-foreground shadow-glow h-12 text-base font-semibold"
-                    onClick={() => {
-                      const log = ensureToday();
-                      saveLog({ ...log, workoutDone: true });
-                      toast.success("Workout logged!");
-                    }}
-                  >
-                    <Check className="mr-2 h-4 w-4" /> Mark complete
-                  </Button>
+                  {workoutDone ? (
+                    <Button disabled className="mt-2 w-full h-12 text-base font-semibold bg-green-500/20 text-green-400 border border-green-500/30 cursor-default">
+                      <Check className="mr-2 h-4 w-4" /> Completed
+                    </Button>
+                  ) : (
+                    <Button
+                      className="mt-2 w-full bg-gradient-hero text-primary-foreground shadow-glow h-12 text-base font-semibold"
+                      onClick={() => {
+                        const log = ensureToday();
+                        saveLog({ ...log, workoutDone: true });
+                        setWorkoutDone(true);
+                        toast.success("Workout logged!");
+                      }}
+                    >
+                      <Check className="mr-2 h-4 w-4" /> Mark complete
+                    </Button>
+                  )}
                 </div>
               )}
             </div>

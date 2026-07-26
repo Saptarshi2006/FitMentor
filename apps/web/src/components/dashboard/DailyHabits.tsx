@@ -1,6 +1,7 @@
 import { Droplet, Beef, Dumbbell } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { ensureToday, saveLog } from "@/utils/habits";
 import type { DailyLog } from "@fitmentor/shared";
 
@@ -63,7 +64,13 @@ export function DailyHabits({ log, onLogChange }: { log: DailyLog; onLogChange: 
           <Dumbbell className="h-4 w-4 text-primary" /> Workout
         </span>
         <button
-          onClick={() => update({ workoutDone: !log.workoutDone })}
+          onClick={() => {
+            if (!log.workoutDone) {
+              toast.error("Complete your workout plan first.");
+              return;
+            }
+            update({ workoutDone: false });
+          }}
           className={`relative h-6 w-11 rounded-full transition-colors ${log.workoutDone ? "bg-primary" : "bg-muted"}`}
         >
           <span
