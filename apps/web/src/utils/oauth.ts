@@ -138,6 +138,9 @@ export const exchangeDiscordCode = createServerFn({ method: "POST" })
     if (userExists && mode === "signup") {
       return { ok: false, error: "user_exists" } as const;
     }
+    if (!userExists && mode === "signin") {
+      return { ok: false, error: "user_not_found" } as const;
+    }
 
     const sid = await createSession({
       sub,

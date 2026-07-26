@@ -37,6 +37,8 @@ function DiscordCallback() {
         }
       } else if (result.error === "user_exists") {
         setError("An account already exists with this Discord. Please sign in instead.");
+      } else if (result.error === "user_not_found") {
+        setError("No account found with this Discord. Please sign up first.");
       } else {
         setError(result.error || "Authentication failed");
       }
@@ -44,6 +46,10 @@ function DiscordCallback() {
   }, []);
 
   if (error) {
+    const isUserNotFound = error.includes("No account found");
+    const ctaHref = isUserNotFound ? "/signup" : "/signin";
+    const ctaLabel = isUserNotFound ? "Sign up" : "Sign in";
+
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
         <div className="text-center max-w-sm">
@@ -51,16 +57,16 @@ function DiscordCallback() {
           <p className="mt-2 text-sm text-muted-foreground">{error}</p>
           <p className="text-sm text-muted-foreground">
             Please{" "}
-            <a href="/signin" className="underline font-medium hover:text-foreground">
-              sign in
+            <a href={ctaHref} className="underline font-medium hover:text-foreground">
+              {ctaLabel}
             </a>{" "}
             instead.
           </p>
           <a
-            href="/signin"
+            href={ctaHref}
             className="mt-4 inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
           >
-            Try again
+            {ctaLabel} with Discord
           </a>
         </div>
       </div>
