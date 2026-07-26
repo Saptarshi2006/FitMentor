@@ -20,9 +20,14 @@ export function getKV(): any | null {
 }
 
 function getSecret(): string {
-  const secret = process.env.SESSION_SECRET;
-  if (!secret) throw new Error("SESSION_SECRET not set");
-  return secret;
+  // Try process.env first (works in local dev / Node)
+  const fromProcess = process.env.SESSION_SECRET;
+  if (fromProcess) return fromProcess;
+  // Fall back to Cloudflare env binding (works in Workers runtime)
+  const cfEnv = getCloudflareEnv() as Record<string, string> | null;
+  const fromCf = cfEnv?.SESSION_SECRET;
+  if (fromCf) return fromCf;
+  throw new Error("SESSION_SECRET not set");
 }
 
 async function hmacSign(data: string, secret: string): Promise<string> {
@@ -51,8 +56,12 @@ async function hmacVerify(data: string, signature: string, secret: string): Prom
 }
 
 export async function deriveKey(sid: string): Promise<string> {
-  const secret = process.env.SESSION_SECRET;
-  if (!secret) return sid;
+  let secret: string | undefined;
+  try {
+    secret = getSecret();
+  } catch {
+    return sid;
+  }
   const data = new TextEncoder().encode(sid + secret);
   const hash = await crypto.subtle.digest("SHA-256", data);
   return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, "0")).join("");
