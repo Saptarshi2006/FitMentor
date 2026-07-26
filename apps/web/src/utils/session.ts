@@ -161,11 +161,23 @@ export async function getSession(sid: string): Promise<(SessionData & { remember
   const kv = getKV();
   if (!kv) return null;
   try {
+    // Try hashed key first (new format — SESSION_SECRET was set)
     const key = await deriveKey(sid);
     const raw = await kv.get(key);
-    if (!raw) return null;
-    const data = JSON.parse(raw);
-    return { sub: data.sub, email: data.email, name: data.name, provider: data.provider, rememberToken: data.rememberToken };
+    if (raw) {
+      const data = JSON.parse(raw);
+      return { sub: data.sub, email: data.email, name: data.name, provider: data.provider, rememberToken: data.rememberToken };
+    }
+    // Fallback: try raw sid as key (legacy sessions created when SESSION_SECRET was missing)
+    const rawFallback = await kv.get(sid);
+    if (rawFallback) {
+      const data = JSON.parse(rawFallback);
+      // Migrate: re-store with hashed key so future lookups work
+      await kv.put(key, rawFallback, { expirationTtl: SESSION_TTL });
+      await kv.delete(sid);
+      return { sub: data.sub, email: data.email, name: data.name, provider: data.provider, rememberToken: data.rememberToken };
+    }
+    return null;
   } catch {
     return null;
   }
@@ -201,6 +213,7 @@ export async function deleteSession(sid: string): Promise<void> {
   try {
     const key = await deriveKey(sid);
     await kv.delete(key);
+    await kv.delete(sid); // also delete legacy raw-key entry
   } catch {
   }
 }
