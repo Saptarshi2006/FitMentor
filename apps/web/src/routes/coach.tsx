@@ -34,8 +34,6 @@ const STARTERS = [
   "Is my workout plan good?",
 ];
 
-const WS_URL = import.meta.env.VITE_WS_URL || "wss://fitmentor-ws.fly.dev/ws";
-
 function buildSystemPrompt(p: Record<string, any> | undefined): string {
   if (!p) return "User has not completed onboarding yet.";
   const h = p.healthConditions?.length ? `- Health conditions: ${p.healthConditions.join(", ")}` : "";
@@ -74,10 +72,8 @@ function Coach() {
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sessionsLoading, setSessionsLoading] = useState(false);
-  const wsRef = useRef<WebSocket | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const { profile } = useProfile();
-  const [wsConnected, setWsConnected] = useState(false);
 
   const loadSessions = useCallback(async () => {
     setSessionsLoading(true);
@@ -96,39 +92,6 @@ function Coach() {
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
-
-  useEffect(() => {
-    const cfToken = document.cookie.split("; ").find(c => c.startsWith("CF_Authorization="))?.split("=")[1];
-    if (!cfToken) return;
-    const ws = new WebSocket(`${WS_URL}?token=${cfToken}`);
-    ws.onopen = () => setWsConnected(true);
-    ws.onmessage = (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        if (data.type === "chat_response") {
-          setMessages((prev) => {
-            const last = prev[prev.length - 1];
-            if (last?.role === "assistant") {
-              const updated = [...prev];
-              updated[updated.length - 1] = { ...last, content: data.content };
-              return updated;
-            }
-            return [...prev, { role: "assistant", content: data.content }];
-          });
-          setLoading(false);
-          loadSessions();
-        }
-        if (data.type === "chat_error") {
-          toast.error(data.message);
-          setLoading(false);
-        }
-      } catch {}
-    };
-    ws.onclose = () => setWsConnected(false);
-    ws.onerror = () => setWsConnected(false);
-    wsRef.current = ws;
-    return () => ws.close();
-  }, [loadSessions]);
 
   async function switchSession(id: string) {
     try {
@@ -194,20 +157,6 @@ function Coach() {
     setMessages(newMsgs);
     setInput("");
     setLoading(true);
-
-    const ws = wsRef.current;
-    if (ws && wsConnected && ws.readyState === WebSocket.OPEN) {
-      const aiMessages = buildChatMessages(newMsgs, profileWithTargets);
-      ws.send(JSON.stringify({
-        type: "chat",
-        ai_request: JSON.stringify({ messages: aiMessages }),
-        messages: JSON.stringify(newMsgs),
-        last_message: q,
-        session_id: sid,
-        tier: "free",
-      }));
-      return;
-    }
 
     try {
       const res = await ask({

@@ -71,12 +71,6 @@ export async function chatCompletion(opts: {
           content: m.content,
         })),
       },
-      {
-        gateway: {
-          id: "fitmentor-ai-gateway",
-          skipCache: false,
-        },
-      },
     );
 
     return response?.choices?.[0]?.message?.content ?? response?.response ?? "";
