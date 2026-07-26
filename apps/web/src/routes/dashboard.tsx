@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Flame, Dumbbell, Apple, TrendingUp, Sparkles, ChevronRight } from "lucide-react";
 import { loadProfile, saveProfile, calcTargets, GOAL_LABEL, type Profile } from "@/utils/profile";
@@ -17,7 +17,6 @@ export const Route = createFileRoute("/dashboard")({
 });
 
 function DashboardPage() {
-  const navigate = useNavigate();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [log, setLog] = useState<DailyLog | null>(null);
   const [streak, setStreak] = useState(0);
@@ -29,16 +28,16 @@ useEffect(() => {
       try {
         const client = getClient();
         const data = await client.request<{ me: { profile: Profile | null } }>(ME_QUERY);
-        const profile = data.me.profile;
+        const profile = data.me?.profile;
         if (profile && profile.name) {
           saveProfile(profile);
           p = profile;
         } else {
-          navigate({ to: "/onboarding" });
+          window.location.href = "/onboarding";
           return;
         }
       } catch {
-        navigate({ to: "/onboarding" });
+        window.location.href = "/onboarding";
         return;
       }
     }
@@ -58,7 +57,7 @@ useEffect(() => {
     window.removeEventListener("fitmentor:logs", onChange);
     window.removeEventListener("fitmentor:profile", onChange);
   };
-}, [navigate]);
+}, []);
 
   if (!profile || !log) {
     return (

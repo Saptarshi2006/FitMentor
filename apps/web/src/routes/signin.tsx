@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Dumbbell } from "lucide-react";
 import logoImg from "@/assets/logo-v2.png";
@@ -10,19 +10,18 @@ export const Route = createFileRoute("/signin")({
 });
 
 function SignInPage() {
-  const navigate = useNavigate();
   const [loading, setLoading] = useState("");
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
     checkSession().then((s) => {
       if (s.ok) {
-        navigate({ to: "/dashboard" });
+        window.location.href = "/dashboard";
       } else {
         setChecking(false);
       }
     });
-  }, [navigate]);
+  }, []);
 
   const signInDiscord = async () => {
     setLoading("discord");
