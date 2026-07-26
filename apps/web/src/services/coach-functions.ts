@@ -71,8 +71,28 @@ ${profileBlock}`;
     const sid = getCookie(SESSION_COOKIE);
     const session = sid ? await extractSessionId(sid).then((id) => (id ? getSession(id) : null)) : null;
 
+    // Look up user's subscription tier from backend
+    let tier = "free";
+    if (session?.sub) {
+      try {
+        const apiUrl = process.env.API_URL || "https://16-112-132-239.sslip.io";
+        const apiKey = process.env.API_SHARED_SECRET;
+        const subRes = await fetch(`${apiUrl}/v1/user/subscription`, {
+          headers: {
+            "X-Api-Key": apiKey ?? "",
+            "X-User-Id": session.sub,
+          },
+        });
+        if (subRes.ok) {
+          const subData = await subRes.json();
+          const srv = subData?.data?.subscription;
+          if (srv?.tier) tier = srv.tier;
+        }
+      } catch {}
+    }
+
     const messages: ChatMessage[] = [{ role: "system", content: system }, ...data.messages];
-    const reply = await chatCompletion({ messages, userId: session?.sub });
+    const reply = await chatCompletion({ messages, userId: session?.sub, tier });
 
     if (session?.sub) {
       const apiUrl = process.env.API_URL || "https://16-112-132-239.sslip.io";

@@ -25,20 +25,46 @@ function getKV(): any | null {
   }
 }
 
-const DAILY_AI_LIMIT = 8000;
+// Total AI token pool shared across all users
+const TOTAL_AI_POOL = 10_000;
+
+// Tier percentages of the total pool
+const TIER_PERCENTAGE: Record<string, number> = {
+  free: 0.5,    // 5,000 tokens/day
+  pro: 0.7,     // 7,000 tokens/day
+  premium: 1.0, // 10,000 tokens/day
+};
+
+function getTierLimit(tier: string): number {
+  return Math.floor(TOTAL_AI_POOL * (TIER_PERCENTAGE[tier] ?? TIER_PERCENTAGE.free));
+}
 
 export async function chatCompletion(opts: {
   model?: string;
   messages: ChatMessage[];
   userId?: string;
+  tier?: string;
 }): Promise<string> {
   const kv = getKV();
   if (kv && opts.userId) {
     const date = new Date().toISOString().slice(0, 10);
-    const key = `quota:ai:global:${date}`;
-    const current = parseInt((await kv.get(key)) || "0", 10);
-    if (current >= DAILY_AI_LIMIT) {
-      throw new Error("AI daily limit reached — try again tomorrow.");
+    const userLimit = getTierLimit(opts.tier ?? "free");
+
+    // Check global cap
+    const globalKey = `quota:ai:global:${date}`;
+    const globalCurrent = parseInt((await kv.get(globalKey)) || "0", 10);
+    if (globalCurrent >= TOTAL_AI_POOL) {
+      throw new Error("AI daily limit reached for all users — try again tomorrow.");
+    }
+
+    // Check per-user cap based on tier
+    const userKey = `quota:ai:user:${opts.userId}:${date}`;
+    const userCurrent = parseInt((await kv.get(userKey)) || "0", 10);
+    if (userCurrent >= userLimit) {
+      throw new Error(
+        `AI daily limit reached for your ${opts.tier ?? "free"} plan — ` +
+        `${userCurrent}/${userLimit} tokens used today.`,
+      );
     }
   }
 
@@ -63,9 +89,15 @@ export async function chatCompletion(opts: {
     );
 
     if (kv && opts.userId) {
-      const key = `quota:ai:global:${new Date().toISOString().slice(0, 10)}`;
-      const current = parseInt((await kv.get(key)) || "0", 10);
-      await kv.put(key, String(current + 1));
+      const date = new Date().toISOString().slice(0, 10);
+      // Increment global counter
+      const globalKey = `quota:ai:global:${date}`;
+      const globalCurrent = parseInt((await kv.get(globalKey)) || "0", 10);
+      await kv.put(globalKey, String(globalCurrent + 1), { expirationTtl: 86400 });
+      // Increment per-user counter
+      const userKey = `quota:ai:user:${opts.userId}:${date}`;
+      const userCurrent = parseInt((await kv.get(userKey)) || "0", 10);
+      await kv.put(userKey, String(userCurrent + 1), { expirationTtl: 86400 });
     }
 
     return response?.choices?.[0]?.message?.content ?? response?.response ?? "";

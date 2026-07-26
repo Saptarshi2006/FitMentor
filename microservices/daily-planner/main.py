@@ -15,10 +15,19 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 CF_MODEL = "@cf/meta/llama-4-scout-17b-16e-instruct"
-PLANNER_AI_LIMIT = 2000
-PLANNER_USER_LIMIT = 50
+
+# Total AI token pool shared across all users
+TOTAL_AI_POOL = 10_000
+
+# Tier percentages of the total pool
+TIER_PERCENTAGE = {
+    "free": 0.5,     # 5,000 tokens/day
+    "pro": 0.7,      # 7,000 tokens/day
+    "premium": 1.0,  # 10,000 tokens/day
+}
 
 r = None
+db_conn = None
 
 def connect_redis():
     global r
@@ -31,21 +40,53 @@ def connect_redis():
         logger.warning("Redis unavailable, quota tracking disabled: %s", e)
         r = None
 
+def get_db():
+    """Get database connection from the HTTP handler."""
+    return GenerateHandler.conn if hasattr(GenerateHandler, 'conn') else None
+
+def get_user_tier(cf_sub: str) -> str:
+    """Look up user's subscription tier from the database."""
+    try:
+        conn = get_db()
+        if conn is None:
+            return "free"
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT tier FROM subscriptions WHERE user_id = "
+            "(SELECT id FROM users WHERE cf_access_sub = %s LIMIT 1) "
+            "AND status = 'active' LIMIT 1",
+            (cf_sub,),
+        )
+        row = cur.fetchone()
+        if row and row[0]:
+            return row[0]
+    except Exception as e:
+        logger.warning("Failed to lookup tier for %s: %s", cf_sub, e)
+    return "free"
+
+def get_tier_limit(tier: str) -> int:
+    """Calculate per-user AI limit based on tier percentage of total pool."""
+    pct = TIER_PERCENTAGE.get(tier, TIER_PERCENTAGE["free"])
+    return int(TOTAL_AI_POOL * pct)
+
 def check_quota(cf_sub: str) -> bool:
     if r is None:
         return True
     today = date.today().isoformat()
+    tier = get_user_tier(cf_sub)
+    user_limit = get_tier_limit(tier)
+
     pipe = r.pipeline()
     pipe.incr(f"quota:planner:ai:{today}")
     pipe.expire(f"quota:planner:ai:{today}", 86400)
     pipe.incr(f"quota:planner:user:{cf_sub}:{today}")
     pipe.expire(f"quota:planner:user:{cf_sub}:{today}", 86400)
     global_count, _, user_count, _ = pipe.execute()
-    if global_count > PLANNER_AI_LIMIT:
+    if global_count > TOTAL_AI_POOL:
         logger.warning("Planner AI daily limit reached (%d)", global_count)
         return False
-    if user_count > PLANNER_USER_LIMIT:
-        logger.warning("User %s daily AI limit reached (%d)", cf_sub, user_count)
+    if user_count > user_limit:
+        logger.warning("User %s (%s plan) daily AI limit reached (%d/%d)", cf_sub, tier, user_count, user_limit)
         return False
     return True
 
