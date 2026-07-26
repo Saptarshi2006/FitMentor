@@ -31,9 +31,9 @@ function DiscordCallback() {
       if (result.ok) {
         // New user → go to onboarding; existing user → go to dashboard
         if (result.userExists === false) {
-          window.location.href = "/onboarding";
+          window.location.replace("/onboarding");
         } else {
-          window.location.href = "/dashboard";
+          window.location.replace("/dashboard");
         }
       } else if (result.error === "user_exists") {
         setError("An account already exists with this Discord. Please sign in instead.");
