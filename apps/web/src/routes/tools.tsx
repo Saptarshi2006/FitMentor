@@ -146,6 +146,7 @@ function BMIAnalyzer() {
           <div>
             <p className="text-xs text-muted-foreground">Weight (kg)</p>
             <input
+              id="bmi-weight"
               type="number"
               value={weight}
               onChange={(e) => setWeight(e.target.value)}
@@ -156,6 +157,7 @@ function BMIAnalyzer() {
           <div>
             <p className="text-xs text-muted-foreground">Height (cm)</p>
             <input
+              id="bmi-height"
               type="number"
               value={height}
               onChange={(e) => setHeight(e.target.value)}
@@ -284,6 +286,7 @@ function SleepTracker() {
             Log tonight's sleep: <strong>{sleepVal}h</strong>
           </p>
           <input
+            id="sleep-hours"
             type="range"
             min={0}
             max={12}
@@ -611,6 +614,7 @@ function CalorieTimeline() {
         <div className="mt-4 rounded-xl bg-background p-4">
           <p className="mb-1 text-xs text-muted-foreground">Daily deficit / surplus</p>
           <input
+            id="daily-deficit"
             type="range"
             min={100}
             max={800}
@@ -628,6 +632,7 @@ function CalorieTimeline() {
         <div className="mt-3 rounded-xl bg-background p-4">
           <p className="mb-1 text-xs text-muted-foreground">Timeline (weeks)</p>
           <input
+            id="timeline-weeks"
             type="range"
             min={4}
             max={12}

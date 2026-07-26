@@ -289,6 +289,7 @@ function Coach() {
           className="flex items-center gap-2 rounded-2xl border border-border/60 bg-card/95 p-2 shadow-card backdrop-blur"
         >
           <input
+            id="coach-message"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask your coach…"

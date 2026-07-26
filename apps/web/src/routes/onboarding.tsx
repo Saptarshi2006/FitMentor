@@ -223,6 +223,7 @@ function Onboarding() {
         {step === 6 && (
           <Field title="How many days per week?" sub={`${draft.daysPerWeek} days/week`}>
             <input
+              id="days-per-week"
               type="range"
               min={2}
               max={6}
@@ -283,6 +284,7 @@ function Onboarding() {
                 Food budget: ₹{draft.budgetPerDay}/day
               </label>
               <input
+                id="budget-per-day"
                 type="range"
                 min={80}
                 max={400}
@@ -374,6 +376,7 @@ function NumInput({
       <p className="text-xs text-muted-foreground">{label}</p>
       <div className="mt-1 flex items-end gap-1">
         <input
+          id={label?.toLowerCase().replace(/\s+/g, "-") || "field"}
           inputMode="numeric"
           value={(value as string | number) ?? ""}
           onChange={(e) => onChange(Number(e.target.value))}
