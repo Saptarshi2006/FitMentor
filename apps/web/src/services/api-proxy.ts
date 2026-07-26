@@ -1,28 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getCookie } from "@tanstack/react-start/server";
-import { getSession, extractSessionId, getKV, deriveKey } from "@/utils/session";
+import { resolveSessionFromToken } from "@/utils/session";
 
 const SESSION_COOKIE = "fitmentor_session";
 const API_URL = process.env.API_URL || "https://16-112-132-239.sslip.io";
-
-function parseCookie(cookie: string | null, name: string): string | null {
-  if (!cookie) return null;
-  for (const part of cookie.split(";")) {
-    const [k, ...v] = part.trim().split("=");
-    if (k === name) return v.join("=") || null;
-  }
-  return null;
-}
-
-async function resolveSession(): Promise<{ sub: string; email: string } | null> {
-  const raw = getCookie(SESSION_COOKIE);
-  if (!raw) return null;
-  const sid = await extractSessionId(raw);
-  if (!sid) return null;
-  const session = await getSession(sid);
-  if (!session) return null;
-  return { sub: session.sub, email: session.email };
-}
 
 function authHeaders(sub: string, email?: string): Record<string, string> {
   const apiKey = process.env.API_SHARED_SECRET;
@@ -33,6 +14,12 @@ function authHeaders(sub: string, email?: string): Record<string, string> {
   };
   if (email) h["X-User-Email"] = email;
   return h;
+}
+
+async function resolveSession(): Promise<{ sub: string; email: string } | null> {
+  const raw = getCookie(SESSION_COOKIE);
+  if (!raw) return null;
+  return resolveSessionFromToken(raw);
 }
 
 export const proxyGraphQL = createServerFn({ method: "POST" })

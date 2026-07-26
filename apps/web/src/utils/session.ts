@@ -88,7 +88,7 @@ export interface SessionData {
 
 // --- Signed token helpers ---
 // Cookie format: base64url(payload).hex(hmac)
-// Payload: { sid, exp }
+// Payload: { sid, sub, email, exp } — session data embedded for KV-free reads
 
 function base64urlEncode(buf: ArrayBuffer): string {
   return btoa(String.fromCharCode(...new Uint8Array(buf)))
@@ -105,47 +105,64 @@ function base64urlDecode(str: string): ArrayBuffer {
   return buf.buffer;
 }
 
-async function createSignedToken(sid: string): Promise<string> {
+async function createSignedToken(sid: string, sub: string, email: string): Promise<string> {
   try {
     const secret = getSecret();
-    const payload = JSON.stringify({ sid, exp: Math.floor(Date.now() / 1000) + TOKEN_MAX_AGE });
+    const payload = JSON.stringify({ sid, sub, email, exp: Math.floor(Date.now() / 1000) + TOKEN_MAX_AGE });
     const payloadB64 = base64urlEncode(new TextEncoder().encode(payload).buffer);
     const sig = await hmacSign(payloadB64, secret);
     return `${payloadB64}.${sig}`;
   } catch {
-    // SESSION_SECRET not set — return raw sid (insecure, but backward compatible)
     return sid;
   }
 }
 
-async function verifySignedToken(token: string): Promise<string | null> {
+export interface SignedTokenPayload {
+  sid: string;
+  sub: string;
+  email: string;
+  exp: number;
+}
+
+async function verifySignedToken(token: string): Promise<SignedTokenPayload | null> {
   try {
     const dot = token.lastIndexOf(".");
-    if (dot === -1) return token; // legacy raw sid
+    if (dot === -1) return null;
     const payloadB64 = token.slice(0, dot);
     const sig = token.slice(dot + 1);
     const secret = getSecret();
     if (!(await hmacVerify(payloadB64, sig, secret))) return null;
     const payload = JSON.parse(new TextDecoder().decode(base64urlDecode(payloadB64)));
     if (typeof payload.exp !== "number" || payload.exp < Math.floor(Date.now() / 1000)) return null;
-    if (typeof payload.sid !== "string") return null;
-    return payload.sid;
+    if (typeof payload.sid !== "string" || typeof payload.sub !== "string") return null;
+    return payload as SignedTokenPayload;
   } catch {
     return null;
   }
 }
 
 /**
+ * Extract session data directly from the signed token (no KV needed).
+ * Returns { sub, email, sid } or null.
+ */
+export async function resolveSessionFromToken(cookieValue: string): Promise<{ sub: string; email: string } | null> {
+  if (!cookieValue) return null;
+  if (!cookieValue.includes(".")) return null; // legacy raw sid — can't resolve without KV
+  const payload = await verifySignedToken(cookieValue);
+  if (!payload) return null;
+  return { sub: payload.sub, email: payload.email };
+}
+
+/**
  * Extract the raw session ID from any cookie value.
- * Accepts both signed tokens (new format) and raw session IDs (legacy).
+ * For signed tokens, returns the sid. For legacy raw sids, returns as-is.
  */
 export async function extractSessionId(cookieValue: string): Promise<string | null> {
   if (!cookieValue) return null;
-  // New format: base64.hmac
   if (cookieValue.includes(".")) {
-    return verifySignedToken(cookieValue);
+    const payload = await verifySignedToken(cookieValue);
+    return payload?.sid ?? null;
   }
-  // Legacy raw sid
   return cookieValue;
 }
 
@@ -162,8 +179,8 @@ export async function createSession(data: SessionData): Promise<string | null> {
     await kv.put(`remember:${rememberToken}`, JSON.stringify({ sub: data.sub, email: data.email, name: data.name, provider: data.provider }), {
       expirationTtl: REMEMBER_TTL,
     });
-    // Return a signed token instead of raw sid
-    return createSignedToken(sid);
+    // Return a signed token with embedded session data
+    return createSignedToken(sid, data.sub, data.email);
   } catch {
     return null;
   }
@@ -213,7 +230,7 @@ export async function renewSession(sid: string): Promise<string | null> {
     await kv.put(newKey, JSON.stringify({ ...remData, rememberToken, createdAt: Date.now() }), {
       expirationTtl: SESSION_TTL,
     });
-    return createSignedToken(newSid);
+    return createSignedToken(newSid, remData.sub, remData.email);
   } catch {
     return null;
   }

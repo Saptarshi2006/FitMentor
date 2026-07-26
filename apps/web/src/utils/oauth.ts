@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getCookie, setResponseHeader } from "@tanstack/react-start/server";
-import { getSession, createSession, deleteSession, renewSession, deleteRememberToken, extractSessionId } from "@/utils/session";
+import { getSession, createSession, deleteSession, renewSession, deleteRememberToken, extractSessionId, resolveSessionFromToken } from "@/utils/session";
 import { useState, useEffect } from "react";
 
 interface DiscordUser {
@@ -25,11 +25,14 @@ function clearSessionCookie() {
 export const checkSession = createServerFn({ method: "GET" }).handler(async () => {
   const raw = getCookie(SESSION_COOKIE);
   if (raw) {
+    // Try signed token first (no KV needed)
+    const session = await resolveSessionFromToken(raw);
+    if (session) return { ok: true } as const;
+    // Legacy: try raw sid with KV
     const sid = await extractSessionId(raw);
     if (sid) {
-      const session = await getSession(sid);
-      if (session) return { ok: true } as const;
-      // Session expired — try renewing via remember token in KV
+      const kvSession = await getSession(sid);
+      if (kvSession) return { ok: true } as const;
       const newSid = await renewSession(sid);
       if (newSid) {
         setSessionCookie(newSid);
@@ -44,11 +47,14 @@ export const checkSession = createServerFn({ method: "GET" }).handler(async () =
 export const getCurrentUser = createServerFn({ method: "GET" }).handler(async () => {
   const raw = getCookie(SESSION_COOKIE);
   if (!raw) return null;
+  const session = await resolveSessionFromToken(raw);
+  if (session) return session;
+  // Legacy: try raw sid with KV
   const sid = await extractSessionId(raw);
   if (!sid) return null;
-  const session = await getSession(sid);
-  if (!session) return null;
-  return { sub: session.sub, email: session.email };
+  const kvSession = await getSession(sid);
+  if (!kvSession) return null;
+  return { sub: kvSession.sub, email: kvSession.email };
 });
 
 export function useAuth() {
