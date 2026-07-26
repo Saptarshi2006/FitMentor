@@ -29,7 +29,14 @@ function DiscordCallback() {
     const state = params.get("state") || "";
     exchangeDiscordCode({ data: { code, state } }).then((result) => {
       if (result.ok) {
-        window.location.href = "/dashboard";
+        // New user → go to onboarding; existing user → go to dashboard
+        if (result.userExists === false) {
+          window.location.href = "/onboarding";
+        } else {
+          window.location.href = "/dashboard";
+        }
+      } else if (result.error === "user_exists") {
+        setError("An account already exists with this Discord. Please sign in instead.");
       } else {
         setError(result.error || "Authentication failed");
       }

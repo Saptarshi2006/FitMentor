@@ -70,10 +70,33 @@ export const getDiscordAuthUrl = createServerFn({ method: "GET" })
     url.searchParams.set("redirect_uri", redirectUri);
     url.searchParams.set("response_type", "code");
     url.searchParams.set("scope", "identify email");
+    if (ctx.data.mode) {
+      url.searchParams.set("state", ctx.data.mode);
+    }
     return url.toString();
   });
 
 const discordCodec = (d: { code: string; state?: string }) => d;
+
+async function checkUserExists(sub: string): Promise<boolean> {
+  const apiUrl = process.env.API_URL || "https://16-112-132-239.sslip.io";
+  const apiKey = process.env.API_SHARED_SECRET;
+  if (!apiKey) return false;
+  try {
+    const res = await fetch(`${apiUrl}/v1/user/exists`, {
+      headers: {
+        "X-Api-Key": apiKey,
+        "X-User-Id": sub,
+        "Content-Type": "application/json",
+      },
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    return data.exists === true;
+  } catch {
+    return false;
+  }
+}
 
 export const exchangeDiscordCode = createServerFn({ method: "POST" })
   .validator(discordCodec)
@@ -108,6 +131,14 @@ export const exchangeDiscordCode = createServerFn({ method: "POST" })
     const sub = `discord:${discordUser.id}`;
     const email = discordUser.email || `${discordUser.username}@discord`;
 
+    // Check if user already exists in the database
+    const userExists = await checkUserExists(sub);
+    const mode = state || "signin"; // "signup" or "signin"
+
+    if (userExists && mode === "signup") {
+      return { ok: false, error: "user_exists" } as const;
+    }
+
     const sid = await createSession({
       sub,
       email,
@@ -121,6 +152,7 @@ export const exchangeDiscordCode = createServerFn({ method: "POST" })
     return {
       ok: true,
       user: { sub, email, name: discordUser.username, provider: "discord" },
+      userExists,
     } as const;
   });
 
