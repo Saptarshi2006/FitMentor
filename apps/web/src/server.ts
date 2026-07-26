@@ -2,7 +2,7 @@ import "./utils/error-capture";
 
 import { consumeLastCapturedError } from "./utils/error-capture";
 import { renderErrorPage } from "./utils/error-page";
-import { deriveKey, extractSessionId } from "./utils/session";
+import { deriveKey, extractSessionId, getKV } from "./utils/session";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -53,11 +53,11 @@ function parseCookie(cookie: string | null, name: string): string | null {
   return null;
 }
 
-async function getUserSub(request: Request, env: any): Promise<string | null> {
+async function getUserSub(request: Request, _env: any): Promise<string | null> {
   const raw = parseCookie(request.headers.get("cookie"), "fitmentor_session");
   if (!raw) return null;
   try {
-    const kv = env?.fitmentor_sessions;
+    const kv = getKV();
     if (!kv) return null;
     const sid = await extractSessionId(raw);
     if (!sid) return null;
@@ -87,17 +87,27 @@ async function callApi(sub: string, path: string, method: string, body?: unknown
   });
 }
 
-async function getUserSession(request: Request, env: any): Promise<{ sub: string; email: string } | null> {
+async function getUserSession(request: Request, _env: any): Promise<{ sub: string; email: string } | null> {
   const raw = parseCookie(request.headers.get("cookie"), "fitmentor_session");
   if (!raw) return null;
   try {
-    const kv = env?.fitmentor_sessions;
+    const kv = getKV();
     if (!kv) return null;
     const sid = await extractSessionId(raw);
     if (!sid) return null;
     const key = await deriveKey(sid);
     const data = await kv.get(key);
-    if (!data) return null;
+    if (!data) {
+      // Fallback: try raw sid for legacy sessions
+      const rawFallback = await kv.get(sid);
+      if (rawFallback) {
+        const parsed = JSON.parse(rawFallback);
+        await kv.put(key, rawFallback, { expirationTtl: 86400 });
+        await kv.delete(sid);
+        return { sub: parsed.sub ?? null, email: parsed.email ?? "" };
+      }
+      return null;
+    }
     const session = JSON.parse(data);
     return { sub: session.sub ?? null, email: session.email ?? "" };
   } catch {
@@ -221,9 +231,9 @@ async function handleGraphQL(request: Request, env: any): Promise<Response> {
   }
 }
 
-async function handleValidateSession(request: Request, env: any): Promise<Response> {
+async function handleValidateSession(request: Request, _env: any): Promise<Response> {
   try {
-    const kv = env?.fitmentor_sessions;
+    const kv = getKV();
     if (!kv) return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
 
     const raw = parseCookie(request.headers.get("cookie"), "fitmentor_session");
