@@ -300,6 +300,16 @@ async fn main() {
         config.cf_access_aud,
     ));
 
+    // Ensure Redis Streams consumer group exists
+    if let Some(mut conn) = cache.get_conn() {
+        services::streams::ensure_coach_group(&mut conn).await;
+        let pool_clone = pool.clone();
+        let ingest_url = std::env::var("INGEST_URL").unwrap_or_else(|_| "http://ingest:8001".into());
+        tokio::spawn(async move {
+            services::streams::consume_coach_logs(&pool_clone, &mut conn, ingest_url).await;
+        });
+    }
+
     let state = AppState {
         pool,
         cache,

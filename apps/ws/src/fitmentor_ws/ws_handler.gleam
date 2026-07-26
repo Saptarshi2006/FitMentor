@@ -214,7 +214,6 @@ fn handle_chat(
 ) -> mist.Next(WsState, WsMessage) {
   let ai_body = extract_json_string(msg, "ai_request")
   let last_message = extract_json_string(msg, "last_message")
-  let session_id = extract_json_string(msg, "session_id")
   let tier = extract_json_string(msg, "tier")
   let msgs = extract_json_string(msg, "messages")
 
@@ -243,7 +242,7 @@ fn handle_chat(
         }
         Ok(#(_, quota_resp)) -> {
           case extract_json_string(quota_resp, "allowed") {
-            "true" -> call_ai(state, conn, ai_body, msgs, last_message, session_id, api_url, api_key)
+            "true" -> call_ai(state, conn, ai_body, msgs, last_message, tier)
             _ -> {
               let limit = extract_json_string(quota_resp, "limit")
               let used = extract_json_string(quota_resp, "used")
@@ -269,9 +268,7 @@ fn call_ai(
   ai_body: String,
   msgs: String,
   last_message: String,
-  session_id: String,
-  api_url: String,
-  api_key: String,
+  tier: String,
 ) -> mist.Next(WsState, WsMessage) {
   let cf_account = jwt.cf_account_id()
   let cf_token = jwt.cf_api_token()
@@ -298,7 +295,7 @@ fn call_ai(
       let resp = "{\"type\":\"chat_response\",\"content\":\"" <> safe <> "\"}"
       let _ = mist.send_text_frame(conn, resp)
 
-      // Coach log (fire and forget)
+      // Coach log (fire and forget, direct to Redis Streams)
       let log_body =
         "{\"messages\":"
         <> msgs
@@ -308,15 +305,12 @@ fn call_ai(
         <> safe
         <> "\",\"container_tag\":\""
         <> state.user_id
-        <> "\",\"session_id\":\""
-        <> escape_json(session_id)
+        <> "\",\"user_id\":\""
+        <> state.user_id
+        <> "\",\"tier\":\""
+        <> escape_json(tier)
         <> "\"}"
-      let _ = jwt.http_post_authed(
-        api_url <> "/v1/coach/log",
-        log_body,
-        api_key,
-        state.user_id,
-      )
+      let _ = jwt.xadd_coach_log(log_body)
 
       mist.continue(state)
     }

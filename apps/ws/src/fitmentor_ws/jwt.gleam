@@ -3,6 +3,7 @@ import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/string
+import valkyrie
 
 pub type AuthError {
   MissingToken
@@ -42,6 +43,31 @@ fn erl_throttle_check(user_id: String, minute_bucket: Int, limit: Int) -> Int
 
 @external(erlang, "fitmentor_ws@jwt_ffi", "current_minute_bucket")
 fn erl_current_minute_bucket() -> Int
+
+pub fn xadd_coach_log(payload: String) -> Bool {
+  let url = erl_get_env("REDIS_URL")
+  case url == "" {
+    True -> False
+    False -> {
+      let config = case valkyrie.url_config(url) {
+        Ok(c) -> c
+        Error(_) -> valkyrie.default_config()
+      }
+      case valkyrie.create_connection(config, 5000) {
+        Error(_) -> False
+        Ok(conn) -> {
+          let _ = valkyrie.custom(
+            conn,
+            ["XADD", "stream:coach:logs", "*", "payload", payload],
+            5000,
+          )
+          let _ = valkyrie.shutdown(conn, 1000)
+          True
+        }
+      }
+    }
+  }
+}
 
 /// Read CF_JWKS_URL; empty string when unset.
 pub fn jwks_url() -> String {
