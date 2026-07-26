@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { getCookie } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { chatCompletion, type ChatMessage } from "./ai-gateway.server";
-import { getSession, extractSessionId } from "@/utils/session";
+import { resolveSessionFromToken } from "@/utils/session";
 
 const SESSION_COOKIE = "fitmentor_session";
 
@@ -68,8 +68,16 @@ Rules:
 
 ${profileBlock}`;
 
-    const sid = getCookie(SESSION_COOKIE);
-    const session = sid ? await extractSessionId(sid).then((id) => (id ? getSession(id) : null)) : null;
+    const cookie = getCookie(SESSION_COOKIE);
+    const ip = (() => {
+      try {
+        const key = Symbol.for("tanstack-start:event-storage");
+        const store = (globalThis as any)[key]?.getStore?.();
+        const headers = store?.h3Event?.req?.headers;
+        return headers?.["cf-connecting-ip"] || headers?.["x-forwarded-for"]?.split(",")[0]?.trim() || "";
+      } catch { return ""; }
+    })();
+    const session = cookie ? await resolveSessionFromToken(cookie, ip) : null;
 
     // Look up user's subscription tier from backend
     let tier = "free";
