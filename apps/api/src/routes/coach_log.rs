@@ -18,6 +18,15 @@ pub async fn log(
     AuthUser { user_id, .. }: AuthUser,
     Json(req): Json<CoachLogRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    // Look up user's subscription tier
+    let tier: String = sqlx::query_scalar(
+        "SELECT tier FROM subscriptions WHERE user_id = $1 AND status = 'active' LIMIT 1",
+    )
+    .bind(&user_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .unwrap_or_else(|| "free".to_string());
+
     sqlx::query(
         "INSERT INTO coach_logs (user_id, container_tag, messages)
          VALUES ($1, $2, $3)
@@ -38,6 +47,7 @@ pub async fn log(
             .json(&serde_json::json!({
                 "container_tag": container_tag,
                 "content": content,
+                "tier": tier,
             }))
             .send()
             .await;
