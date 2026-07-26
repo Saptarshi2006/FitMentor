@@ -3,6 +3,7 @@ const REMEMBER_TTL = 60 * 60 * 24 * 7; // 7 days
 const TOKEN_MAX_AGE = 60 * 60 * 24 * 7; // 7 days — signed token lifetime
 
 function getCloudflareEnv(): Record<string, unknown> | null {
+  // 1. Try TanStack Start ALS event storage (works in server functions)
   try {
     const key = Symbol.for("tanstack-start:event-storage");
     const store = (globalThis as any)[key]?.getStore?.();
@@ -10,7 +11,18 @@ function getCloudflareEnv(): Record<string, unknown> | null {
     const fromAls = event?.req?.runtime?.cloudflare?.env;
     if (fromAls) return fromAls;
   } catch {}
-  return (globalThis as any).__cf_env ?? null;
+  // 2. Try globalThis.__cf_env (set from request.runtime in server.ts fetch handler)
+  const fromGlobal = (globalThis as any).__cf_env;
+  if (fromGlobal) return fromGlobal;
+  // 3. Try Nitro event context directly
+  try {
+    const key = Symbol.for("nitro:event-context");
+    const store = (globalThis as any)[key]?.getStore?.();
+    const event: any = store?.event;
+    if (event?.context?.cloudflare?.env) return event.context.cloudflare.env;
+    if (event?.context?.cf) return event.context.cf;
+  } catch {}
+  return null;
 }
 
 export function getKV(): any | null {
