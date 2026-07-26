@@ -1,21 +1,13 @@
-import { GraphQLClient } from "graphql-request";
-
-let token: string | null = null;
-
-export function setAuthToken(t: string | null) {
-  token = t;
-}
+import { proxyGraphQL } from "@/services/api-proxy.server";
 
 export function getClient() {
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
-  return new GraphQLClient(`${origin}/api/graphql`, {
-    headers: () => {
-      const h: Record<string, string> = {};
-      if (token) {
-        h["Authorization"] = `Bearer ${token}`;
-        h["cf-access-jwt-assertion"] = token;
+  return {
+    async request<T = any>(query: string, variables?: Record<string, unknown>): Promise<T> {
+      const result = await proxyGraphQL({ data: { query, variables } });
+      if (result.errors) {
+        throw new Error(result.errors[0]?.message ?? "GraphQL error");
       }
-      return h;
+      return result.data as T;
     },
-  });
+  };
 }

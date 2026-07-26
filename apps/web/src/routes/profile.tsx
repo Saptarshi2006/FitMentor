@@ -13,6 +13,7 @@ import {
   type PlanTier,
 } from "@/utils/subscription";
 import { fetchSubscription } from "@/services/sync";
+import { proxyCheckout } from "@/services/api-proxy.server";
 import { Button } from "@/components/ui/button";
 import {
   Crown,
@@ -286,12 +287,7 @@ function PolarCheckout({
   const plan = PLANS.find((p) => p.tier === tier);
 
   useEffect(() => {
-    fetch("/api/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tier }),
-    })
-      .then((r) => r.json())
+    proxyCheckout({ data: { tier } })
       .then((data) => {
         if (data.checkout_url) {
           window.location.href = data.checkout_url;
