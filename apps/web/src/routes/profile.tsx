@@ -47,16 +47,16 @@ const PLANS: {
   accent?: boolean;
 }[] = [
   {
-    tier: "premium",
-    name: "Premium",
+    tier: "pro",
+    name: "Pro",
     price: 99,
     period: "month",
     features: ["Unlimited AI Coach", "Custom meal plans", "Advanced analytics"],
     accent: false,
   },
   {
-    tier: "pro",
-    name: "Pro",
+    tier: "premium",
+    name: "Premium",
     price: 299,
     period: "month",
     features: ["Everything in Premium", "Form analyzer", "Photo macros", "Progress reports"],
