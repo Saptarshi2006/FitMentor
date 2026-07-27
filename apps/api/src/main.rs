@@ -274,6 +274,29 @@ async fn run_migrations(pool: &PgPool) {
     .await
     .expect("failed to add coach_logs unique index");
 
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS chat_sessions (
+            id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id    TEXT NOT NULL,
+            title      TEXT NOT NULL DEFAULT 'New Chat',
+            messages   JSONB NOT NULL DEFAULT '[]',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        "#,
+    )
+    .execute(pool)
+    .await
+    .expect("failed to create chat_sessions table");
+
+    sqlx::query(
+        r#"CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_id ON chat_sessions(user_id)"#,
+    )
+    .execute(pool)
+    .await
+    .expect("failed to create chat_sessions index");
+
     tracing::info!("migrations complete");
 }
 
