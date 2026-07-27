@@ -4,15 +4,38 @@ import fitmentor_ws/ws_handler
 import gleam/bit_array
 import gleam/bytes_tree
 import gleam/http
-import gleam/http/request
+import gleam/http/request.{type Request}
 import gleam/http/response
 import gleam/list
+import gleam/result
 import mist
+
+fn handle_ingest(req: Request(BitArray)) {
+  case req.method {
+    http.Post -> {
+      let body_str = case bit_array.to_string(req.body) {
+        Ok(s) -> s
+        Error(_) -> "{\"ok\":false,\"error\":\"body decode\"}"
+      }
+      let result = ingest.handle(body_str)
+      response.new(200)
+      |> response.set_header("content-type", "application/json")
+      |> response.set_body(mist.Bytes(bytes_tree.from_string(result)))
+    }
+    _ ->
+      response.new(404)
+      |> response.set_body(mist.Bytes(bytes_tree.new()))
+  }
+}
 
 pub fn start() -> Result(Nil, Nil) {
   jwt.throttle_init()
   let not_found =
     response.new(404)
+    |> response.set_body(mist.Bytes(bytes_tree.new()))
+
+  let body_err =
+    response.new(400)
     |> response.set_body(mist.Bytes(bytes_tree.new()))
 
   let assert Ok(_) =
@@ -39,13 +62,10 @@ pub fn start() -> Result(Nil, Nil) {
             handler: ws_handler.handle_message,
           )
         }
-        ["v1", "ingest"] -> {
-          response.new(200)
-          |> response.set_header("content-type", "application/json")
-          |> response.set_body(mist.Bytes(bytes_tree.from_string(
-            "{\"ok\":true,\"handler\":\"v1/ingest\"}",
-          )))
-        }
+        ["v1", "ingest"] ->
+          mist.read_body(req, max_body_limit: 1_000_000)
+          |> result.map(handle_ingest)
+          |> result.lazy_unwrap(fn() { body_err })
         _ -> not_found
       }
     }
