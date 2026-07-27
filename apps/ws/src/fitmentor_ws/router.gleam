@@ -42,7 +42,7 @@ pub fn start() -> Result(Nil, Nil) {
         ["v1", "ingest"] -> {
           case req.method {
             http.Post ->
-              case mist.read_body(req, 1_000_000) {
+              case mist.read_body(req, max_body_limit: 1_000_000) {
                 Ok(req_body) -> {
                   let body_str = case bit_array.to_string(req_body.body) {
                     Ok(s) -> s
