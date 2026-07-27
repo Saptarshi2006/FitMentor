@@ -19,8 +19,8 @@ export function DashboardLayout({
           <span suppressHydrationWarning>
             {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" })}
           </span>
-          {auth?.email && (
-            <span className="ml-2 lowercase normal-case tracking-normal text-primary">· {auth.email}</span>
+          {auth?.user?.email && (
+            <span className="ml-2 lowercase normal-case tracking-normal text-primary">· {auth.user.email}</span>
           )}
         </p>
         {profile && (

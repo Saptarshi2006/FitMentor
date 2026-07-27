@@ -1,49 +1,8 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: fitmentor
-      POSTGRES_PASSWORD: fitmentor
-      POSTGRES_DB: fitmentor
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
-
-  mongodb:
-    image: mongo:7
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongodata:/data/db
-
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
-
-  kafka:
-    image: bitnami/kafka:latest
-    ports:
-      - "9092:9092"
-    environment:
-      KAFKA_CFG_NODE_ID: "1"
-      KAFKA_CFG_PROCESS_ROLES: "broker,controller"
-      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
-      KAFKA_CFG_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
-      KAFKA_CFG_ADVERTISED_LISTENERS: "PLAINTEXT://localhost:9092"
-      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
-      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
-      ALLOW_PLAINTEXT_LISTENER: "yes"
 
   api:
     build:
@@ -52,15 +11,21 @@ services:
     ports:
       - "3000:3000"
     environment:
-      DATABASE_URL: postgres://fitmentor:fitmentor@postgres:5432/fitmentor
       REDIS_URL: redis://redis:6379
-      MONGODB_URL: mongodb://mongodb:27017
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
-      KAFKA_BROKERS: kafka:9092
       PORT: "3000"
       POLAR_WEBHOOK_SECRET: ${POLAR_WEBHOOK_SECRET:-}
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://fitmentor-7lx.pages.dev}
+      API_SHARED_SECRET: ${API_SHARED_SECRET:-}
+      APP_URL: ${APP_URL:-https://fitmentor-7lx.pages.dev}
+      CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
+      CF_ACCESS_AUD: ${CF_ACCESS_AUD:-}
+      POLAR_ACCESS_TOKEN: ${POLAR_ACCESS_TOKEN:-}
+      POLAR_PREMIUM_PRODUCT_ID: ${POLAR_PREMIUM_PRODUCT_ID:-}
+      POLAR_PREMIUM_PRICE_ID: ${POLAR_PREMIUM_PRICE_ID:-}
+      POLAR_PRO_PRODUCT_ID: ${POLAR_PRO_PRODUCT_ID:-}
+      POLAR_PRO_PRICE_ID: ${POLAR_PRO_PRICE_ID:-}
+      PLANNER_URL: ${PLANNER_URL:-http://planner:8002}
     depends_on:
-      - postgres
       - redis
 
   ws:
@@ -71,8 +36,29 @@ services:
       - "8080:8080"
     environment:
       REDIS_URL: redis://redis:6379
-    depends_on:
-      - redis
+
+  ingest:
+    build:
+      context: .
+      dockerfile: apps/ingest-python/Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      SUPERMEMORY_API_KEY: ${SUPERMEMORY_API_KEY:-}
+
+  planner:
+    build:
+      context: .
+      dockerfile: microservices/daily-planner/Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://fitmentor:fitmentor@postgres:5432/fitmentor}
+      REDIS_URL: redis://redis:6379
+      CF_ACCOUNT_ID: ${CF_ACCOUNT_ID:-}
+      CF_API_TOKEN: ${CF_API_TOKEN:-}
+      PORT: "8002"
+      MODE: "http"
 
   tigerbeetle:
     image: ghcr.io/tigerbeetle/tigerbeetle
@@ -83,8 +69,4 @@ services:
       - tbdata:/data
 
 volumes:
-  pgdata:
-  mongodata:
-  rabbitmqdata:
-  kafkadata:
   tbdata:

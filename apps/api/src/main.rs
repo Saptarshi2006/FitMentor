@@ -2,6 +2,7 @@ mod auth;
 mod config;
 mod db;
 mod error;
+mod graphql;
 mod models;
 mod routes;
 mod services;
@@ -9,21 +10,271 @@ mod services;
 use auth::jwt::JwtValidator;
 use axum::http::header;
 use axum::http::Method;
+use axum::Router;
 use config::Config;
+use graphql::schema::create_schema;
 use sqlx::PgPool;
 use std::sync::Arc;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::CorsLayer;
 use tracing_subscriber::EnvFilter;
 
 use crate::services::cache::CacheService;
+
+async fn graphiql() -> impl axum::response::IntoResponse {
+    axum::response::Html(async_graphql::http::GraphiQLSource::build().endpoint("/graphql").finish())
+}
+
+async fn graphql_handler(
+    state: axum::extract::State<AppState>,
+    headers: axum::http::HeaderMap,
+    req: async_graphql_axum::GraphQLRequest,
+) -> async_graphql_axum::GraphQLResponse {
+    let schema = create_schema();
+    let user = extract_auth_user(&state, &headers).await;
+    let gql_ctx = graphql::context::GqlContext::new(&state, user);
+    schema.execute(req.into_inner().data(gql_ctx)).await.into()
+}
+
+async fn extract_auth_user(
+    state: &AppState,
+    headers: &axum::http::HeaderMap,
+) -> Option<auth::middleware::AuthUser> {
+    // API key auth (server-to-server)
+    if !state.api_shared_secret.is_empty() {
+        if let Some(api_key) = headers.get("x-api-key").and_then(|v| v.to_str().ok()) {
+            if api_key == state.api_shared_secret {
+                let user_id = headers.get("x-user-id").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+                let email = headers.get("x-user-email").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+                return Some(auth::middleware::AuthUser { user_id, email });
+            }
+        }
+    }
+    // JWT auth (Authorization or cf-access-jwt-assertion header)
+    if let Some(token) = headers.get("cf-access-jwt-assertion").or_else(|| headers.get("authorization")).and_then(|v| v.to_str().ok()).and_then(|s| s.strip_prefix("Bearer ").or(Some(s))) {
+        if let Ok(claims) = state.jwt_validator.validate(token).await {
+            return Some(auth::middleware::AuthUser { user_id: claims.sub, email: claims.email });
+        }
+    }
+    // Session cookie auth (browser requests)
+    if let Some(cookie) = headers.get("cookie").and_then(|v| v.to_str().ok()) {
+        for part in cookie.split(';') {
+            let part = part.trim();
+            if let Some(sid) = part.strip_prefix("fitmentor_session=") {
+                // Try Redis lookup first
+                if let Some(data) = state.cache.get(&format!("session:{}", sid)).await {
+                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&data) {
+                        let user_id = json.get("sub").or_else(|| json.get("cf_sub")).and_then(|v| v.as_str().map(String::from)).unwrap_or_default();
+                        let email = json["email"].as_str().unwrap_or("").to_string();
+                        let name = json["name"].as_str().unwrap_or("").to_string();
+                        if !user_id.is_empty() {
+                            let _ = sqlx::query(
+                                "INSERT INTO users (cf_access_sub, email, name) VALUES ($1, $2, $3) ON CONFLICT (cf_access_sub) DO UPDATE SET email = EXCLUDED.email, name = COALESCE(EXCLUDED.name, users.name), updated_at = now()"
+                            )
+                            .bind(&user_id)
+                            .bind(&email)
+                            .bind(&name)
+                            .execute(&state.pool)
+                            .await;
+                            return Some(auth::middleware::AuthUser { user_id, email });
+                        }
+                    }
+                }
+                // Fallback: validate via Workers KV session bridge
+                if !state.app_url.is_empty() {
+                    if let Ok(client) = reqwest::Client::builder()
+                        .timeout(std::time::Duration::from_secs(5))
+                        .build()
+                    {
+                        let validation_url = format!("{}/api/validate-session", state.app_url);
+                        if let Ok(resp) = client
+                            .get(&validation_url)
+                            .header("cookie", format!("fitmentor_session={}", sid))
+                            .send()
+                            .await
+                        {
+                            if resp.status().is_success() {
+                                if let Ok(json) = resp.json::<serde_json::Value>().await {
+                                    let user_id = json.get("sub").and_then(|v| v.as_str().map(String::from)).unwrap_or_default();
+                                    let email = json["email"].as_str().unwrap_or("").to_string();
+                                    let name = json["name"].as_str().unwrap_or("").to_string();
+                                    if !user_id.is_empty() {
+                                        let session_data = serde_json::json!({
+                                            "sub": user_id,
+                                            "cf_sub": user_id,
+                                            "email": email,
+                                            "name": name,
+                                            "iat": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis(),
+                                        });
+                                        state.cache.set(&format!("session:{}", sid), &session_data.to_string(), 604800).await;
+                                        let _ = sqlx::query(
+                                            "INSERT INTO users (cf_access_sub, email, name) VALUES ($1, $2, $3) ON CONFLICT (cf_access_sub) DO UPDATE SET email = EXCLUDED.email, name = COALESCE(EXCLUDED.name, users.name), updated_at = now()"
+                                        )
+                                        .bind(&user_id)
+                                        .bind(&email)
+                                        .bind(&name)
+                                        .execute(&state.pool)
+                                        .await;
+                                        return Some(auth::middleware::AuthUser { user_id, email });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
 
 #[derive(Clone)]
 pub struct AppState {
     pub pool: PgPool,
     pub cache: CacheService,
     pub jwt_validator: Arc<JwtValidator>,
+    pub polar_access_token: String,
     pub polar_webhook_secret: String,
+    pub polar_premium_product_id: String,
+    pub polar_premium_price_id: String,
+    pub polar_pro_product_id: String,
+    pub polar_pro_price_id: String,
     pub api_shared_secret: String,
+    pub planner_url: String,
+    pub app_url: String,
+}
+
+async fn run_migrations(pool: &PgPool) {
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS meal_plans (
+            id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id    TEXT NOT NULL,
+            date       DATE NOT NULL,
+            plan       JSONB NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        "#,
+    )
+    .execute(pool)
+    .await
+    .expect("failed to create meal_plans table");
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS workout_plans (
+            id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id    TEXT NOT NULL,
+            date       DATE NOT NULL,
+            plan       JSONB NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        "#,
+    )
+    .execute(pool)
+    .await
+    .expect("failed to create workout_plans table");
+
+    sqlx::query(
+        r#"CREATE UNIQUE INDEX IF NOT EXISTS idx_meal_plans_user_date ON meal_plans(user_id, date)"#,
+    )
+    .execute(pool)
+    .await
+    .expect("failed to create meal_plans index");
+
+    sqlx::query(
+        r#"CREATE UNIQUE INDEX IF NOT EXISTS idx_workout_plans_user_date ON workout_plans(user_id, date)"#,
+    )
+    .execute(pool)
+    .await
+    .expect("failed to create workout_plans index");
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS bmi_advice (
+            id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id    TEXT NOT NULL,
+            date       DATE NOT NULL,
+            plan       JSONB NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        "#,
+    )
+    .execute(pool)
+    .await
+    .expect("failed to create bmi_advice table");
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS sleep_advice (
+            id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id    TEXT NOT NULL,
+            date       DATE NOT NULL,
+            plan       JSONB NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        "#,
+    )
+    .execute(pool)
+    .await
+    .expect("failed to create sleep_advice table");
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS injury_advice (
+            id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id    TEXT NOT NULL,
+            date       DATE NOT NULL,
+            plan       JSONB NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        "#,
+    )
+    .execute(pool)
+    .await
+    .expect("failed to create injury_advice table");
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS form_advice (
+            id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id    TEXT NOT NULL,
+            date       DATE NOT NULL,
+            plan       JSONB NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ not null default now()
+        );
+        "#,
+    )
+    .execute(pool)
+    .await
+    .expect("failed to create form_advice table");
+
+    sqlx::query(r#"CREATE UNIQUE INDEX IF NOT EXISTS idx_bmi_advice_user_date ON bmi_advice(user_id, date)"#)
+        .execute(pool).await.expect("failed to create bmi_advice index");
+    sqlx::query(r#"CREATE UNIQUE INDEX IF NOT EXISTS idx_sleep_advice_user_date ON sleep_advice(user_id, date)"#)
+        .execute(pool).await.expect("failed to create sleep_advice index");
+    sqlx::query(r#"CREATE UNIQUE INDEX IF NOT EXISTS idx_injury_advice_user_date ON injury_advice(user_id, date)"#)
+        .execute(pool).await.expect("failed to create injury_advice index");
+    sqlx::query(r#"CREATE UNIQUE INDEX IF NOT EXISTS idx_form_advice_user_date ON form_advice(user_id, date)"#)
+        .execute(pool).await.expect("failed to create form_advice index");
+
+    sqlx::query("DELETE FROM coach_logs WHERE messages = '[]' OR messages IS NULL")
+        .execute(pool)
+        .await
+        .expect("failed to clean old coach_logs");
+    sqlx::query(
+        r#"CREATE UNIQUE INDEX IF NOT EXISTS idx_coach_logs_user_container ON coach_logs(user_id, container_tag)"#,
+    )
+    .execute(pool)
+    .await
+    .expect("failed to add coach_logs unique index");
+
+    tracing::info!("migrations complete");
 }
 
 #[tokio::main]
@@ -40,6 +291,8 @@ async fn main() {
         .await
         .expect("failed to connect to database");
 
+    run_migrations(&pool).await;
+
     let cache = services::cache::CacheService::new(&config.redis_url).await;
 
     let jwt_validator = Arc::new(JwtValidator::new(
@@ -47,16 +300,34 @@ async fn main() {
         config.cf_access_aud,
     ));
 
+    // Ensure Redis Streams consumer group exists
+    if let Some(mut conn) = cache.get_conn() {
+        services::streams::ensure_coach_group(&mut conn).await;
+        let pool_clone = pool.clone();
+        let ingest_url = std::env::var("INGEST_URL").unwrap_or_else(|_| "http://ingest:8001".into());
+        tokio::spawn(async move {
+            services::streams::consume_coach_logs(&pool_clone, &mut conn, ingest_url).await;
+        });
+    }
+
     let state = AppState {
         pool,
         cache,
         jwt_validator,
+        polar_access_token: config.polar_access_token,
         polar_webhook_secret: config.polar_webhook_secret,
+        polar_premium_product_id: config.polar_premium_product_id,
+        polar_premium_price_id: config.polar_premium_price_id,
+        polar_pro_product_id: config.polar_pro_product_id,
+        polar_pro_price_id: config.polar_pro_price_id,
         api_shared_secret: config.api_shared_secret,
+        planner_url: config.planner_url,
+        app_url: config.app_url,
     };
 
+    let origin = config.cors_origin.parse::<header::HeaderValue>().expect("invalid cors_origin");
     let cors = CorsLayer::new()
-        .allow_origin(Any)
+        .allow_origin(vec![origin.clone()])
         .allow_methods([
             Method::GET,
             Method::POST,
@@ -68,13 +339,19 @@ async fn main() {
             header::AUTHORIZATION,
             header::CONTENT_TYPE,
             header::ACCEPT,
+            header::COOKIE,
+            header::SET_COOKIE,
             "cf-access-jwt-assertion".parse().unwrap(),
             "x-api-key".parse().unwrap(),
             "x-user-id".parse().unwrap(),
             "x-user-email".parse().unwrap(),
-        ]);
+        ])
+        .allow_credentials(true);
 
-    let app = routes::routes(state).layer(cors);
+    let app = routes::routes()
+        .merge(Router::new().route("/graphql", axum::routing::get(graphiql).post(graphql_handler)))
+        .layer(cors)
+        .with_state(state);
 
     let addr = format!("0.0.0.0:{}", config.port);
     let listener = tokio::net::TcpListener::bind(&addr)

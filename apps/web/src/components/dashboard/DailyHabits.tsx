@@ -1,7 +1,7 @@
-import { Droplet, Beef, Dumbbell } from "lucide-react";
+import { Droplet, Beef } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { ensureToday, saveLog } from "@/utils/habits";
+import { saveLog } from "@/utils/habits";
 import type { DailyLog } from "@fitmentor/shared";
 
 // ponytail: water target hardcoded — could come from profile, but 8 glasses is universal enough
@@ -55,21 +55,6 @@ export function DailyHabits({ log, onLogChange }: { log: DailyLog; onLogChange: 
         >
           +20g protein
         </Button>
-      </div>
-
-      {/* Workout */}
-      <div className="mt-4 flex items-center justify-between">
-        <span className="flex items-center gap-1.5 text-sm font-medium">
-          <Dumbbell className="h-4 w-4 text-primary" /> Workout
-        </span>
-        <button
-          onClick={() => update({ workoutDone: !log.workoutDone })}
-          className={`relative h-6 w-11 rounded-full transition-colors ${log.workoutDone ? "bg-primary" : "bg-muted"}`}
-        >
-          <span
-            className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${log.workoutDone ? "translate-x-5" : ""}`}
-          />
-        </button>
       </div>
     </div>
   );

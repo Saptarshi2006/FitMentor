@@ -6,6 +6,8 @@ import { loadLogs, saveLog, todayKey, last7, type DailyLog } from "@/utils/habit
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/utils/cn";
+import { getClient } from "@/lib/graphql/client";
+import { TODAY_AI_PLAN_QUERY } from "@/lib/graphql/queries";
 import {
   Scale,
   Moon,
@@ -20,6 +22,10 @@ import {
   MessageCircle,
   TrendingUp,
   TrendingDown,
+  Shapes,
+  Sparkles,
+  Loader,
+  Dumbbell,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -28,7 +34,7 @@ export const Route = createFileRoute("/tools")({
   component: ToolsPage,
 });
 
-type ToolTab = "bmi" | "sleep" | "steps" | "injury" | "supplements" | "calories" | "community";
+type ToolTab = "bmi" | "sleep" | "steps" | "injury" | "supplements" | "calories" | "community" | "form";
 
 const TOOLS: { id: ToolTab; label: string; icon: typeof Scale }[] = [
   { id: "bmi", label: "BMI", icon: Scale },
@@ -38,6 +44,7 @@ const TOOLS: { id: ToolTab; label: string; icon: typeof Scale }[] = [
   { id: "supplements", label: "Supplements", icon: Pill },
   { id: "calories", label: "Calories", icon: CalendarDays },
   { id: "community", label: "Community", icon: Users },
+  { id: "form", label: "Form", icon: Shapes },
 ];
 
 function ToolsPage() {
@@ -82,6 +89,7 @@ function ToolsPage() {
         {tab === "supplements" && <SupplementGuide />}
         {tab === "calories" && <CalorieTimeline />}
         {tab === "community" && <CommunityFeed />}
+        {tab === "form" && <FormAnalyzer />}
       </div>
     </MobileShell>
   );
@@ -91,6 +99,8 @@ function BMIAnalyzer() {
   const { profile } = useProfile();
   const [weight, setWeight] = useState("");
   const [height, setHeight] = useState("");
+  const [aiTips, setAiTips] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (profile) {
@@ -113,6 +123,19 @@ function BMIAnalyzer() {
           ? "text-orange-400"
           : "text-red-400";
 
+  const getAiRecommendations = async () => {
+    setLoading(true);
+    try {
+      const client = getClient();
+      const data = await client.request<{ todayAiPlan: { plan: string[] } | null }>(TODAY_AI_PLAN_QUERY, { table: "bmi_advice" });
+      const tips = data.todayAiPlan?.plan;
+      setAiTips(tips && tips.length > 0 ? tips.join("\n") : "No advice available yet. Generate a plan first.");
+    } catch {
+      setAiTips("Failed to get AI recommendations. Try again.");
+    }
+    setLoading(false);
+  };
+
   return (
     <div className="space-y-5 pt-4">
       <div className="rounded-2xl border border-border/60 bg-card p-5">
@@ -123,6 +146,7 @@ function BMIAnalyzer() {
           <div>
             <p className="text-xs text-muted-foreground">Weight (kg)</p>
             <input
+              id="bmi-weight"
               type="number"
               value={weight}
               onChange={(e) => setWeight(e.target.value)}
@@ -133,6 +157,7 @@ function BMIAnalyzer() {
           <div>
             <p className="text-xs text-muted-foreground">Height (cm)</p>
             <input
+              id="bmi-height"
               type="number"
               value={height}
               onChange={(e) => setHeight(e.target.value)}
@@ -176,6 +201,23 @@ function BMIAnalyzer() {
           </p>
         </div>
         )}
+        {showResult && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-3 w-full"
+            onClick={getAiRecommendations}
+            disabled={loading}
+          >
+            {loading ? <Loader className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            {loading ? "Thinking..." : "AI Recommendations"}
+          </Button>
+        )}
+        {aiTips && (
+          <div className="mt-3 rounded-xl bg-background p-4 text-sm whitespace-pre-wrap">
+            {aiTips}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -192,6 +234,8 @@ function SleepTracker() {
     workoutDone: false,
   }) as DailyLog;
   const [sleepVal, setSleepVal] = useState(today.sleep || 7);
+  const [aiTips, setAiTips] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const logSleep = () => {
     const log = { ...today, sleep: sleepVal };
@@ -213,6 +257,19 @@ function SleepTracker() {
           ? "text-green-400"
           : "text-blue-400";
 
+  const getSleepTips = async () => {
+    setLoading(true);
+    try {
+      const client = getClient();
+      const data = await client.request<{ todayAiPlan: { plan: string[] } | null }>(TODAY_AI_PLAN_QUERY, { table: "sleep_advice" });
+      const tips = data.todayAiPlan?.plan;
+      setAiTips(tips && tips.length > 0 ? tips.join("\n") : "No advice available yet. Generate a plan first.");
+    } catch {
+      setAiTips("Failed to get AI advice. Try again.");
+    }
+    setLoading(false);
+  };
+
   return (
     <div className="space-y-5 pt-4">
       <div className="rounded-2xl border border-border/60 bg-card p-5">
@@ -229,6 +286,7 @@ function SleepTracker() {
             Log tonight's sleep: <strong>{sleepVal}h</strong>
           </p>
           <input
+            id="sleep-hours"
             type="range"
             min={0}
             max={12}
@@ -260,6 +318,21 @@ function SleepTracker() {
             })}
           </div>
         </div>
+        <Button
+          size="sm"
+          variant="outline"
+          className="mt-4 w-full"
+          onClick={getSleepTips}
+          disabled={loading}
+        >
+          {loading ? <Loader className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+          {loading ? "Analyzing..." : "AI Sleep Tips"}
+        </Button>
+        {aiTips && (
+          <div className="mt-3 rounded-xl bg-background p-4 text-sm whitespace-pre-wrap">
+            {aiTips}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -326,73 +399,49 @@ function StepsTracker() {
 }
 
 function InjuryAssessment() {
+  const { profile } = useProfile();
   const [painArea, setPainArea] = useState("");
+  const [description, setDescription] = useState("");
   const [advice, setAdvice] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const areas: { id: string; label: string; icon: string; tips: string; swaps: string }[] = [
-    {
-      id: "knee",
-      label: "Knee",
-      icon: "🦵",
-      tips: "Rest, ice 15min every 2h, avoid deep squats.",
-      swaps: "Replace squats with leg press or wall sits. Reduce knee travel.",
-    },
-    {
-      id: "lower_back",
-      label: "Lower Back",
-      icon: "🔙",
-      tips: "Avoid deadlifts. Stretch hamstrings daily. Sleep with a pillow under knees.",
-      swaps: "Replace deadlifts with hyperextensions. Use a belt for support.",
-    },
-    {
-      id: "shoulder",
-      label: "Shoulder",
-      icon: "💪",
-      tips: "Avoid overhead pressing. Do external rotations and band pull-aparts.",
-      swaps: "Replace OHP with dumbbell incline press. Lateral raises with lighter weight.",
-    },
-    {
-      id: "wrist",
-      label: "Wrist",
-      icon: "✋",
-      tips: "Use straps for pulling. Avoid push-ups on fists. Stretch flexors.",
-      swaps: "Use dumbbells instead of barbell. Push-ups on knuckles or stands.",
-    },
-    {
-      id: "ankle",
-      label: "Ankle",
-      icon: "🦶",
-      tips: "RICE protocol. Balance exercises. Avoid running until pain-free.",
-      swaps: "Replace lunges with stationary cycling. Use ankle brace.",
-    },
-    {
-      id: "elbow",
-      label: "Elbow",
-      icon: "💪",
-      tips: "Rest from gripping. Stretch forearms. Ice after training.",
-      swaps: "Replace chin-ups with lat pulldowns (neutral grip). Use straps.",
-    },
+  const areas = [
+    { id: "knee", label: "Knee", icon: "🦵" },
+    { id: "lower_back", label: "Lower Back", icon: "🔙" },
+    { id: "shoulder", label: "Shoulder", icon: "💪" },
+    { id: "wrist", label: "Wrist", icon: "✋" },
+    { id: "ankle", label: "Ankle", icon: "🦶" },
+    { id: "elbow", label: "Elbow", icon: "💪" },
   ];
 
-  const selected = areas.find((a) => a.id === painArea);
+  const getAIAdvice = async () => {
+    if (!painArea) return;
+    setLoading(true);
+    try {
+      const client = getClient();
+      const data = await client.request<{ todayAiPlan: { plan: string[] } | null }>(TODAY_AI_PLAN_QUERY, { table: "injury_advice" });
+      const tips = data.todayAiPlan?.plan;
+      setAdvice(tips && tips.length > 0 ? tips.join("\n") : "No advice available yet. Generate a plan first.");
+    } catch {
+      setAdvice("Failed to get AI advice. Try again.");
+    }
+    setLoading(false);
+  };
 
   return (
     <div className="space-y-5 pt-4">
       <div className="rounded-2xl border border-border/60 bg-card p-5">
         <h2 className="flex items-center gap-2 text-lg font-bold">
-          <HeartPulse className="h-5 w-5 text-primary" /> Injury Assessment
+          <HeartPulse className="h-5 w-5 text-primary" /> AI Injury Assessment
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Select your pain area for home care + exercise swaps
+          Select your pain area, describe how it feels, get personalized advice
         </p>
         <div className="mt-4 grid grid-cols-3 gap-2">
           {areas.map((a) => (
             <button
               key={a.id}
-              onClick={() => {
-                setPainArea(a.id);
-                setAdvice(null);
-              }}
+              onClick={() => { setPainArea(a.id); setAdvice(null); }}
               className={cn(
                 "flex flex-col items-center gap-1 rounded-xl border p-3 text-center transition",
                 painArea === a.id
@@ -405,23 +454,29 @@ function InjuryAssessment() {
             </button>
           ))}
         </div>
-        {selected && (
-          <div className="mt-4 space-y-3 rounded-xl bg-background p-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Home Care
-              </p>
-              <p className="mt-1 text-sm">{selected.tips}</p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Exercise Swaps
-              </p>
-              <p className="mt-1 text-sm">{selected.swaps}</p>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              ⚠️ If pain persists more than 2 weeks, see a physiotherapist.
-            </p>
+        {painArea && (
+          <>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Describe your pain — when does it hurt? Any swelling? How long?"
+              className="mt-4 w-full rounded-xl border border-border/60 bg-background p-3 text-sm outline-none resize-none"
+              rows={3}
+            />
+            <Button
+              size="sm"
+              className="mt-2 w-full"
+              onClick={getAIAdvice}
+              disabled={loading}
+            >
+              {loading ? <Loader className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              {loading ? "Analyzing..." : "Get AI Advice"}
+            </Button>
+          </>
+        )}
+        {advice && (
+          <div className="mt-4 rounded-xl bg-background p-4 text-sm whitespace-pre-wrap">
+            {advice}
           </div>
         )}
       </div>
@@ -559,6 +614,7 @@ function CalorieTimeline() {
         <div className="mt-4 rounded-xl bg-background p-4">
           <p className="mb-1 text-xs text-muted-foreground">Daily deficit / surplus</p>
           <input
+            id="daily-deficit"
             type="range"
             min={100}
             max={800}
@@ -576,6 +632,7 @@ function CalorieTimeline() {
         <div className="mt-3 rounded-xl bg-background p-4">
           <p className="mb-1 text-xs text-muted-foreground">Timeline (weeks)</p>
           <input
+            id="timeline-weeks"
             type="range"
             min={4}
             max={12}
@@ -609,6 +666,91 @@ function CalorieTimeline() {
         <p className="mt-3 text-xs text-muted-foreground">
           💡 Based on 7,700 kcal ≈ 1 kg fat and 5,500 kcal ≈ 1 kg muscle. Actual results vary.
         </p>
+      </div>
+    </div>
+  );
+}
+
+const EXERCISE_LIST = [
+  "Squat", "Deadlift", "Bench Press", "Overhead Press", "Barbell Row",
+  "Pull-up", "Push-up", "Lunge", "Plank", "Hip Thrust",
+  "Bicep Curl", "Tricep Extension", "Lat Pulldown", "Leg Press", "Dumbbell Fly",
+];
+
+function FormAnalyzer() {
+  const { profile } = useProfile();
+  const [exercise, setExercise] = useState("");
+  const [description, setDescription] = useState("");
+  const [analysis, setAnalysis] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const analyze = async () => {
+    if (!exercise) return;
+    setLoading(true);
+    try {
+      const client = getClient();
+      const data = await client.request<{ todayAiPlan: { plan: string[] } | null }>(TODAY_AI_PLAN_QUERY, { table: "form_advice" });
+      const tips = data.todayAiPlan?.plan;
+      setAnalysis(tips && tips.length > 0 ? tips.join("\n") : "No analysis available yet. Generate a plan first.");
+    } catch {
+      setAnalysis("Failed to analyze. Try again.");
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="space-y-5 pt-4">
+      <div className="rounded-2xl border border-border/60 bg-card p-5">
+        <h2 className="flex items-center gap-2 text-lg font-bold">
+          <Shapes className="h-5 w-5 text-primary" /> Form Analyzer
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Describe how you perform an exercise and get AI form tips
+        </p>
+        <div className="mt-4">
+          <p className="text-xs text-muted-foreground mb-1">Select exercise</p>
+          <div className="flex flex-wrap gap-1.5">
+            {EXERCISE_LIST.map((e) => (
+              <button
+                key={e}
+                onClick={() => { setExercise(e); setAnalysis(null); }}
+                className={cn(
+                  "rounded-full px-3 py-1 text-xs font-medium border transition",
+                  exercise === e
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border/60 text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {e}
+              </button>
+            ))}
+          </div>
+        </div>
+        {exercise && (
+          <>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder={`Describe how you do ${exercise} — stance, grip, depth, any pain or discomfort...`}
+              className="mt-4 w-full rounded-xl border border-border/60 bg-background p-3 text-sm outline-none resize-none"
+              rows={3}
+            />
+            <Button
+              size="sm"
+              className="mt-2 w-full"
+              onClick={analyze}
+              disabled={loading}
+            >
+              {loading ? <Loader className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              {loading ? "Analyzing..." : "Analyze Form"}
+            </Button>
+          </>
+        )}
+        {analysis && (
+          <div className="mt-4 rounded-xl bg-background p-4 text-sm whitespace-pre-wrap">
+            {analysis}
+          </div>
+        )}
       </div>
     </div>
   );

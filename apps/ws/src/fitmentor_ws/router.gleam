@@ -1,3 +1,4 @@
+import fitmentor_ws/jwt
 import fitmentor_ws/ws_handler
 import gleam/bytes_tree
 import gleam/http/request
@@ -6,6 +7,7 @@ import gleam/list
 import mist
 
 pub fn start() -> Result(Nil, Nil) {
+  jwt.throttle_init()
   let not_found =
     response.new(404)
     |> response.set_body(mist.Bytes(bytes_tree.new()))

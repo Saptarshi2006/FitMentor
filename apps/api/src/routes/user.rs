@@ -1,6 +1,8 @@
 use axum::extract::{State, Json as AxumJson};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use serde::Deserialize;
+use uuid::Uuid;
 
 use crate::auth::middleware::AuthUser;
 use crate::error::AppError;
@@ -8,10 +10,52 @@ use crate::models::profile::{Profile, ProteinTarget, UpdateProfile};
 use crate::models::user::User;
 use crate::AppState;
 
+#[derive(Deserialize)]
+pub struct SyncUserRequest {
+    pub cf_sub: String,
+    pub email: String,
+    pub name: Option<String>,
+}
+
+pub async fn sync_user(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    AxumJson(req): AxumJson<SyncUserRequest>,
+) -> Result<AxumJson<serde_json::Value>, AppError> {
+    let api_key = headers.get("x-api-key").and_then(|v| v.to_str().ok()).unwrap_or("");
+    if api_key.is_empty() || api_key != state.api_shared_secret {
+        return Err(AppError::Unauthorized);
+    }
+
+    let user = sqlx::query_as::<_, User>(
+        "INSERT INTO users (cf_access_sub, email, name) VALUES ($1, $2, $3)
+         ON CONFLICT (cf_access_sub) DO UPDATE SET email = EXCLUDED.email, name = COALESCE(EXCLUDED.name, users.name), updated_at = now()
+         RETURNING id, cf_access_sub, email, name, created_at, updated_at"
+    )
+    .bind(&req.cf_sub)
+    .bind(&req.email)
+    .bind(&req.name)
+    .fetch_one(&state.pool)
+    .await?;
+
+    let session_id = Uuid::new_v4().to_string();
+    let session_data = serde_json::json!({
+        "sub": req.cf_sub,
+        "cf_sub": req.cf_sub,
+        "email": req.email,
+        "name": req.name,
+        "iat": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis(),
+    });
+    state.cache.set(&format!("session:{}", session_id), &session_data.to_string(), 604800).await;
+
+    Ok(AxumJson(serde_json::json!({
+        "ok": true,
+        "session_id": session_id,
+        "user": { "id": user.id, "cf_sub": user.cf_access_sub, "email": user.email }
+    })))
+}
+
 fn profile_to_value(p: Profile) -> serde_json::Value {
-    let hc = p.health_conditions
-        .as_deref()
-        .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok());
     serde_json::json!({
         "id": p.id,
         "userId": p.user_id,
@@ -26,7 +70,7 @@ fn profile_to_value(p: Profile) -> serde_json::Value {
         "diet": p.diet,
         "daysPerWeek": p.days_per_week,
         "budgetPerDay": p.budget_per_day,
-        "healthConditions": hc,
+        "healthConditions": p.health_conditions,
         "customProteinG": p.custom_protein_g,
         "createdAt": p.created_at,
         "updatedAt": p.updated_at,
@@ -121,10 +165,6 @@ pub async fn update_profile(
 ) -> Result<Response, AppError> {
     let user = get_user_by_cf_sub(&state.pool, &auth.user_id).await?;
 
-    let hc_str = input.health_conditions
-        .as_ref()
-        .and_then(|v| serde_json::to_string(v).ok());
-
     let profile = sqlx::query_as::<_, Profile>(
         r#"UPDATE profiles SET
             name = COALESCE($2, name),
@@ -149,23 +189,46 @@ pub async fn update_profile(
     .bind(&input.name)
     .bind(input.age)
     .bind(&input.gender)
-    .bind(input.height_cm)
-    .bind(input.weight_kg)
+    .bind(input.height_cm.map(|v| v as i16))
+    .bind(input.weight_kg.map(|v| v as i16))
     .bind(&input.goal)
     .bind(&input.place)
     .bind(&input.experience)
     .bind(&input.diet)
     .bind(input.days_per_week)
-    .bind(input.budget_per_day)
-    .bind(hc_str.as_deref())
+    .bind(input.budget_per_day.map(|v| v as i16))
+    .bind(&input.health_conditions)
     .fetch_one(&state.pool)
     .await?;
 
-    state.cache.invalidate_user(user.id).await;
+    state.cache.invalidate_user(&user.id.to_string()).await;
     state.cache.delete(&format!("cache:user:{}", auth.user_id)).await;
 
+    // Trigger daily-planner to generate plans for this user (fire-and-forget)
+    let planner_url = state.planner_url.clone();
+    let user_id = auth.user_id.clone();
+    tokio::spawn(async move {
+        if let Err(e) = reqwest::Client::new()
+            .post(format!("{}/generate", planner_url))
+            .json(&serde_json::json!({ "user_id": user_id }))
+            .timeout(std::time::Duration::from_secs(120))
+            .send()
+            .await
+        {
+            tracing::warn!("failed to trigger planner for user {user_id}: {e}");
+        }
+    });
+
     let response = serde_json::json!({
-        "data": { "profile": profile_to_value(profile) }
+        "data": {
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "name": user.name,
+                "created_at": user.created_at
+            },
+            "profile": profile_to_value(profile)
+        }
     });
 
     Ok((StatusCode::OK, AxumJson(response)).into_response())
@@ -187,11 +250,18 @@ pub async fn update_protein_target(
     .execute(&state.pool)
     .await?;
 
-    state.cache.invalidate_user(user.id).await;
+    state.cache.invalidate_user(&user.id.to_string()).await;
     state.cache.delete(&format!("cache:user:{}", auth.user_id)).await;
 
     let response = serde_json::json!({
-        "data": { "customProteinG": input.protein_g }
+        "data": {
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "name": user.name,
+                "created_at": user.created_at
+            }
+        }
     });
 
     Ok((StatusCode::OK, AxumJson(response)).into_response())

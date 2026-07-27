@@ -1,8 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
+import { getCookie } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { chatCompletion, type ChatMessage } from "./ai-gateway.server";
+import { resolveSessionFromToken } from "@/utils/session";
+
+const SESSION_COOKIE = "fitmentor_session";
 
 const Input = z.object({
+  session_id: z.string().optional(),
   messages: z
     .array(
       z.object({
@@ -63,7 +68,69 @@ Rules:
 
 ${profileBlock}`;
 
+    const cookie = getCookie(SESSION_COOKIE);
+    const ip = (() => {
+      try {
+        const key = Symbol.for("tanstack-start:event-storage");
+        const store = (globalThis as any)[key]?.getStore?.();
+        const headers = store?.h3Event?.req?.headers;
+        return headers?.["cf-connecting-ip"] || headers?.["x-forwarded-for"]?.split(",")[0]?.trim() || "";
+      } catch { return ""; }
+    })();
+    const session = cookie ? await resolveSessionFromToken(cookie, ip) : null;
+
+    // Look up user's subscription tier from backend
+    let tier = "free";
+    if (session?.sub) {
+      try {
+        const apiUrl = process.env.API_URL || "https://16-112-132-239.sslip.io";
+        const apiKey = process.env.API_SHARED_SECRET;
+        const subRes = await fetch(`${apiUrl}/v1/user/subscription`, {
+          headers: {
+            "X-Api-Key": apiKey ?? "",
+            "X-User-Id": session.sub,
+          },
+        });
+        if (subRes.ok) {
+          const subData = await subRes.json();
+          const srv = subData?.data?.subscription;
+          if (srv?.tier) tier = srv.tier;
+        }
+      } catch {}
+    }
+
     const messages: ChatMessage[] = [{ role: "system", content: system }, ...data.messages];
-    const reply = await chatCompletion({ messages });
+    const reply = await chatCompletion({ messages, userId: session?.sub, tier });
+
+    if (session?.sub) {
+      const apiUrl = process.env.API_URL || "https://16-112-132-239.sslip.io";
+      const apiKey = process.env.API_SHARED_SECRET;
+      const lastUserMsg = [...data.messages].reverse().find((m) => m.role === "user");
+      try {
+        const res = await fetch(`${apiUrl}/v1/coach/log`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Api-Key": apiKey ?? "",
+            "X-User-Id": session.sub,
+            "X-User-Email": session.email,
+          },
+          body: JSON.stringify({
+            messages: data.messages,
+            user_message: lastUserMsg?.content ?? "",
+            reply,
+            container_tag: session.sub,
+            session_id: data.session_id || null,
+          }),
+        });
+        if (!res.ok) {
+          const text = await res.text().catch(() => "?");
+          console.error("coach log fail:", res.status, text);
+        }
+      } catch (e: unknown) {
+        console.error("coach log error:", e instanceof Error ? e.message : String(e));
+      }
+    }
+
     return { reply };
   });

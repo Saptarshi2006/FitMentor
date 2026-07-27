@@ -1,45 +1,84 @@
-// Lovable AI Gateway helper. Server-only — never import from client code.
-import { getLocalResponse } from "./local-coach";
-
-const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
-
 export type ChatMessage = {
   role: "system" | "user" | "assistant";
   content: string;
 };
 
+function getCloudflareEnv(): Record<string, unknown> | null {
+  try {
+    const key = Symbol.for("tanstack-start:event-storage");
+    const store = (globalThis as any)[key]?.getStore?.();
+    const event: any = store?.h3Event;
+    if (event?.context?.cloudflare?.env) return event.context.cloudflare.env;
+    if (event?.context?.env) return event.context.env;
+    if (event?.req?.runtime?.cloudflare?.env) return event.req.runtime.cloudflare.env;
+  } catch {}
+  try {
+    const fromGlobal = (globalThis as any).__cf_env;
+    if (fromGlobal) return fromGlobal;
+  } catch {}
+  try {
+    const key = Symbol.for("nitro:event-context");
+    const store = (globalThis as any)[key]?.getStore?.();
+    const event: any = store?.event;
+    if (event?.context?.cloudflare?.env) return event.context.cloudflare.env;
+  } catch {}
+  return null;
+}
+
+function getAI(): any | null {
+  const env = getCloudflareEnv();
+  return (env as any)?.AI ?? null;
+}
+
 export async function chatCompletion(opts: {
   model?: string;
   messages: ChatMessage[];
+  userId?: string;
+  tier?: string;
 }): Promise<string> {
-  const apiKey = process.env.LOVABLE_API_KEY;
-
-  if (!apiKey) {
-    const systemMsg = opts.messages.find((m) => m.role === "system");
-    const profile = systemMsg?.content ?? "";
-    return getLocalResponse(opts.messages, profile);
+  if (opts.userId) {
+    const apiUrl = process.env.API_URL || "https://16-112-132-239.sslip.io";
+    const apiKey = process.env.API_SHARED_SECRET;
+    const res = await fetch(`${apiUrl}/v1/internal/quota/check-and-consume`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Api-Key": apiKey ?? "",
+        "X-User-Id": opts.userId,
+      },
+      body: JSON.stringify({ tier: opts.tier ?? "free" }),
+    });
+    if (!res.ok) {
+      throw new Error("Quota service unavailable — please try again.");
+    }
+    const result = await res.json();
+    if (!result.allowed) {
+      throw new Error(
+        `AI daily limit reached (${result.used}/${result.limit} tokens).`,
+      );
+    }
   }
 
-  const res = await fetch(GATEWAY_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Lovable-API-Key": apiKey,
-    },
-    body: JSON.stringify({
-      model: opts.model ?? "google/gemini-3-flash-preview",
-      messages: opts.messages,
-    }),
-  });
+  const ai = getAI();
+  if (!ai) throw new Error("AI unavailable — deploy to Cloudflare Workers.");
 
-  if (!res.ok) {
-    const text = await res.text();
-    if (res.status === 429) throw new Error("AI is busy right now — please try again in a moment.");
-    if (res.status === 402)
-      throw new Error("AI credits exhausted. Please add credits to continue.");
-    throw new Error(`AI request failed (${res.status}): ${text.slice(0, 200)}`);
+  try {
+    const response = await ai.run(
+      opts.model ?? "@cf/meta/llama-4-scout-17b-16e-instruct",
+      {
+        messages: opts.messages.map((m) => ({
+          role: m.role,
+          content: m.content,
+        })),
+      },
+    );
+
+    return response?.choices?.[0]?.message?.content ?? response?.response ?? "";
+  } catch (err: any) {
+    const msg = err?.message ?? "";
+    if (msg.includes("429") || msg.includes("rate")) {
+      throw new Error("AI is busy right now — please try again in a moment.");
+    }
+    throw new Error(`AI request failed: ${msg.slice(0, 200)}`);
   }
-
-  const data = await res.json();
-  return data?.choices?.[0]?.message?.content ?? "";
 }

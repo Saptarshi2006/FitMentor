@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getCookie, setResponseHeader } from "@tanstack/react-start/server";
-import { getSession, createSession, deleteSession, renewSession, deleteRememberToken } from "@/utils/session";
+import { getSession, createSession, deleteSession, renewSession, deleteRememberToken, extractSessionId, resolveSessionFromToken } from "@/utils/session";
 import { useState, useEffect } from "react";
 
 interface DiscordUser {
@@ -23,16 +23,22 @@ function clearSessionCookie() {
 }
 
 export const checkSession = createServerFn({ method: "GET" }).handler(async () => {
-  const sid = getCookie(SESSION_COOKIE);
-  if (sid) {
-    const session = await getSession(sid);
+  const raw = getCookie(SESSION_COOKIE);
+  if (raw) {
+    // Try signed token first (no KV needed)
+    const ip = getClientIp();
+    const session = await resolveSessionFromToken(raw, ip);
     if (session) return { ok: true } as const;
-
-    // Session expired — try renewing via remember token in KV
-    const newSid = await renewSession(sid);
-    if (newSid) {
-      setSessionCookie(newSid);
-      return { ok: true } as const;
+    // Legacy: try raw sid with KV
+    const sid = await extractSessionId(raw);
+    if (sid) {
+      const kvSession = await getSession(sid);
+      if (kvSession) return { ok: true } as const;
+      const newSid = await renewSession(sid);
+      if (newSid) {
+        setSessionCookie(newSid);
+        return { ok: true } as const;
+      }
     }
   }
 
@@ -40,11 +46,17 @@ export const checkSession = createServerFn({ method: "GET" }).handler(async () =
 });
 
 export const getCurrentUser = createServerFn({ method: "GET" }).handler(async () => {
-  const sid = getCookie(SESSION_COOKIE);
+  const raw = getCookie(SESSION_COOKIE);
+  if (!raw) return null;
+  const ip = getClientIp();
+  const session = await resolveSessionFromToken(raw, ip);
+  if (session) return session;
+  // Legacy: try raw sid with KV
+  const sid = await extractSessionId(raw);
   if (!sid) return null;
-  const session = await getSession(sid);
-  if (!session) return null;
-  return { sub: session.sub, email: session.email };
+  const kvSession = await getSession(sid);
+  if (!kvSession) return null;
+  return { sub: kvSession.sub, email: kvSession.email };
 });
 
 export function useAuth() {
@@ -58,19 +70,57 @@ export function useAuth() {
 export const getDiscordAuthUrl = createServerFn({ method: "GET" })
   .validator((d?: { mode?: string }) => d ?? {})
   .handler(async (ctx) => {
-    const mode = ctx.data.mode;
     const clientId = process.env.DISCORD_CLIENT_ID || "";
-    const redirectUri = `${process.env.APP_URL || "http://localhost:3000"}/auth/discord/callback`;
+    const appUrl = process.env.APP_URL || "https://fitmentor-7lx.pages.dev";
+    const redirectUri = `${appUrl}/auth/discord/callback`;
     const url = new URL("https://discord.com/api/oauth2/authorize");
     url.searchParams.set("client_id", clientId);
     url.searchParams.set("redirect_uri", redirectUri);
     url.searchParams.set("response_type", "code");
     url.searchParams.set("scope", "identify email");
-    if (mode) url.searchParams.set("state", mode);
+    if (ctx.data.mode) {
+      url.searchParams.set("state", ctx.data.mode);
+    }
     return url.toString();
   });
 
 const discordCodec = (d: { code: string; state?: string }) => d;
+
+function getClientIp(): string {
+  try {
+    const key = Symbol.for("tanstack-start:event-storage");
+    const store = (globalThis as any)[key]?.getStore?.();
+    const event: any = store?.h3Event;
+    const headers = event?.req?.headers;
+    if (!headers) return "";
+    return headers["cf-connecting-ip"]
+      || (headers["x-forwarded-for"] as string)?.split(",")[0]?.trim()
+      || headers["x-real-ip"]
+      || "";
+  } catch {
+    return "";
+  }
+}
+
+async function checkUserExists(sub: string): Promise<boolean> {
+  const apiUrl = process.env.API_URL || "https://16-112-132-239.sslip.io";
+  const apiKey = process.env.API_SHARED_SECRET;
+  if (!apiKey) return false;
+  try {
+    const res = await fetch(`${apiUrl}/v1/user/exists`, {
+      headers: {
+        "X-Api-Key": apiKey,
+        "X-User-Id": sub,
+        "Content-Type": "application/json",
+      },
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    return data.exists === true;
+  } catch {
+    return false;
+  }
+}
 
 export const exchangeDiscordCode = createServerFn({ method: "POST" })
   .validator(discordCodec)
@@ -79,7 +129,7 @@ export const exchangeDiscordCode = createServerFn({ method: "POST" })
 
     const clientId = process.env.DISCORD_CLIENT_ID || "";
     const clientSecret = process.env.DISCORD_CLIENT_SECRET || "";
-    const redirectUri = `${process.env.APP_URL || "http://localhost:3000"}/auth/discord/callback`;
+    const redirectUri = `${process.env.APP_URL || "https://fitmentor-7lx.pages.dev"}/auth/discord/callback`;
 
     const tokenRes = await fetch("https://discord.com/api/oauth2/token", {
       method: "POST",
@@ -104,46 +154,34 @@ export const exchangeDiscordCode = createServerFn({ method: "POST" })
 
     const sub = `discord:${discordUser.id}`;
     const email = discordUser.email || `${discordUser.username}@discord`;
-    const apiUrl = process.env.API_URL || "https://16-112-225-113.sslip.io";
-    const apiKey = process.env.API_SHARED_SECRET || "";
 
-    if (state === "signup" && apiKey) {
-      const existRes = await fetch(`${apiUrl}/v1/user/exists`, {
-        headers: {
-          "X-Api-Key": apiKey,
-          "X-User-Id": sub,
-          "X-User-Email": email,
-        },
-      });
-      const existData = await existRes.json();
-      if (existData.exists) {
-        return { ok: false, error: "user_exists" } as const;
-      }
+    // Check if user already exists in the database
+    const userExists = await checkUserExists(sub);
+    const mode = state || "signin"; // "signup" or "signin"
+
+    if (userExists && mode === "signup") {
+      return { ok: false, error: "user_exists" } as const;
+    }
+    if (!userExists && mode === "signin") {
+      return { ok: false, error: "user_not_found" } as const;
     }
 
+    const ip = getClientIp();
     const sid = await createSession({
       sub,
       email,
       name: discordUser.username,
       provider: "discord",
+      ip,
     });
     if (!sid) return { ok: false, error: "session_create_failed" } as const;
 
     setSessionCookie(sid);
 
-    if (apiKey) {
-      fetch(`${apiUrl}/v1/user/me`, {
-        headers: {
-          "X-Api-Key": apiKey,
-          "X-User-Id": sub,
-          "X-User-Email": email,
-        },
-      }).catch(() => {});
-    }
-
     return {
       ok: true,
       user: { sub, email, name: discordUser.username, provider: "discord" },
+      userExists,
     } as const;
   });
 
@@ -152,22 +190,28 @@ export function logout() {
 }
 
 export const clearSession = createServerFn({ method: "POST" }).handler(async () => {
-  const sid = getCookie(SESSION_COOKIE);
-  if (sid) {
-    const session = await getSession(sid);
-    if (session?.rememberToken) await deleteRememberToken(session.rememberToken);
-    await deleteSession(sid);
+  const raw = getCookie(SESSION_COOKIE);
+  if (raw) {
+    const sid = await extractSessionId(raw);
+    if (sid) {
+      const session = await getSession(sid);
+      if (session?.rememberToken) await deleteRememberToken(session.rememberToken);
+      await deleteSession(sid);
+    }
   }
   clearSessionCookie();
   return { ok: true } as const;
 });
 
 export const forgetDevice = createServerFn({ method: "POST" }).handler(async () => {
-  const sid = getCookie(SESSION_COOKIE);
-  if (sid) {
-    const session = await getSession(sid);
-    if (session?.rememberToken) await deleteRememberToken(session.rememberToken);
-    await deleteSession(sid);
+  const raw = getCookie(SESSION_COOKIE);
+  if (raw) {
+    const sid = await extractSessionId(raw);
+    if (sid) {
+      const session = await getSession(sid);
+      if (session?.rememberToken) await deleteRememberToken(session.rememberToken);
+      await deleteSession(sid);
+    }
   }
   clearSessionCookie();
   return { ok: true } as const;
