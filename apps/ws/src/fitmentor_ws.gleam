@@ -9,7 +9,7 @@ pub fn main() {
 
   io.println("FitMentor WS starting on port 8080")
 
-  let assert Ok(_) = router.start()
+  let _ = router.start()
 
   process.sleep_forever()
 }
