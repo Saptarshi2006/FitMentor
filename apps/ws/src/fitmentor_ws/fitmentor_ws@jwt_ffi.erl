@@ -57,7 +57,8 @@ http_post(Url, Body, Headers) when is_binary(Url) ->
 http_post(Url, Body, Headers) ->
   inets:start(),
   ssl:start(),
-  AllHeaders = [{"content-type", "application/json"} | Headers],
+  AllHeaders = [{"content-type", "application/json"} |
+                [{ensure_list(K), ensure_list(V)} || {K, V} <- Headers]],
   case httpc:request(post, {Url, AllHeaders, "application/json", Body},
                      [{timeout, 60000}], [{body_format, binary}]) of
     {ok, {{_, Status, _}, _RespHeaders, RespBody}} ->
@@ -65,6 +66,10 @@ http_post(Url, Body, Headers) ->
     {error, Reason} ->
       {error, Reason}
   end.
+
+ensure_list(V) when is_binary(V) -> binary_to_list(V);
+ensure_list(V) when is_list(V) -> V;
+ensure_list(V) -> V.
 
 throttle_init() ->
   try
