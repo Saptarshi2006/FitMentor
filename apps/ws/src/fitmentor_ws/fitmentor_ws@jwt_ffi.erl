@@ -54,16 +54,21 @@ http_get(Url) ->
 
 http_post(Url, Body, Headers) when is_binary(Url) ->
   http_post(binary_to_list(Url), Body, Headers);
+http_post(Url, Body, Headers) when is_binary(Body) ->
+  http_post(Url, binary_to_list(Body), Headers);
 http_post(Url, Body, Headers) ->
   inets:start(),
   ssl:start(),
   AllHeaders = [{"content-type", "application/json"} |
                 [{ensure_list(K), ensure_list(V)} || {K, V} <- Headers]],
+  io:format("http_post url=~p headers=~p body=~p~n", [Url, AllHeaders, Body]),
   case httpc:request(post, {Url, AllHeaders, "application/json", Body},
                      [{timeout, 60000}], [{body_format, binary}]) of
     {ok, {{_, Status, _}, _RespHeaders, RespBody}} ->
+      io:format("http_post ok status=~p body=~p~n", [Status, RespBody]),
       {ok, {Status, RespBody}};
     {error, Reason} ->
+      io:format("http_post error reason=~p~n", [Reason]),
       {error, Reason}
   end.
 

@@ -3,6 +3,7 @@ import gleam/float
 import gleam/int
 import gleam/list
 import gleam/string
+import logging
 import valkyrie
 
 const sm_api = "https://api.supermemory.ai"
@@ -93,13 +94,21 @@ fn call_supermemory(content: String, container_tag: String, sm_key: String) -> B
     <> escape_json(container_tag)
     <> "\"}"
   case jwt.http_post_bearer(sm_api <> "/v3/documents", body, sm_key) {
-    Ok(#(status, _)) -> status >= 200 && status < 300
-    Error(_) -> False
+    Ok(#(status, resp)) -> {
+      let _ = logging.log(logging.Warning, "sm response: " <> int.to_string(status) <> " " <> resp)
+      status >= 200 && status < 300
+    }
+    Error(e) -> {
+      let _ = logging.log(logging.Warning, "sm error: " <> e)
+      False
+    }
   }
 }
 
 pub fn handle(body: String) -> String {
   let sm_key = jwt.env("SUPERMEMORY_API_KEY")
+  let sm_status = case sm_key == "" { True -> "no" False -> "yes" }
+  let _ = logging.log(logging.Warning, "sm_key set: " <> sm_status)
   case sm_key == "" {
     True -> "{\"ok\":false,\"error\":\"SUPERMEMORY_API_KEY not set\"}"
     False -> {
@@ -107,12 +116,16 @@ pub fn handle(body: String) -> String {
       let content = extract_json_string(body, "content")
       let tier = extract_json_string(body, "tier")
 
+      let _ = logging.log(logging.Warning, "parsed: tag=" <> container_tag <> " content_len=" <> int.to_string(string.length(content)) <> " tier=" <> tier)
+
       case container_tag == "" || content == "" {
         True -> "{\"ok\":false,\"error\":\"missing required fields\"}"
         False -> {
           let tokens = token_estimate(content)
           let limit = user_limit(tier)
           let used = redis_get("quota:sm:" <> container_tag)
+
+          let _ = logging.log(logging.Warning, "quota: used=" <> int.to_string(used) <> " tokens=" <> int.to_string(tokens) <> " limit=" <> int.to_string(limit))
 
           case used + tokens > limit {
             True ->
