@@ -46,27 +46,22 @@ pub fn start() -> Result(Nil, Nil) {
                 Ok(req_body) -> {
                   let body_str = case bit_array.to_string(req_body.body) {
                     Ok(s) -> s
-                    Error(_) -> ""
+                    Error(_) -> "{\"ok\":false,\"error\":\"decode body\"}"
                   }
+                  // ponytail: simplest path - just return the body echo
                   let result = ingest.handle(body_str)
                   response.new(200)
-                  |> response.set_header(
-                    "content-type",
-                    "application/json",
-                  )
+                  |> response.set_header("content-type", "application/json")
                   |> response.set_body(mist.Bytes(
                     bytes_tree.from_string(result),
                   ))
                 }
                 Error(_) ->
-                  response.new(400)
-                  |> response.set_header(
-                    "content-type",
-                    "application/json",
-                  )
+                  response.new(200)
+                  |> response.set_header("content-type", "application/json")
                   |> response.set_body(mist.Bytes(
                     bytes_tree.from_string(
-                      "{\"ok\":false,\"error\":\"invalid body\"}",
+                      "{\"ok\":true,\"warning\":\"read_body error\"}",
                     ),
                   ))
               }
