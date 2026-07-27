@@ -69,6 +69,11 @@ pub fn xadd_coach_log(payload: String) -> Bool {
   }
 }
 
+/// Read any env var; empty string when unset.
+pub fn env(key: String) -> String {
+  erl_get_env(key)
+}
+
 /// Read CF_JWKS_URL; empty string when unset.
 pub fn jwks_url() -> String {
   erl_get_env("CF_JWKS_URL")

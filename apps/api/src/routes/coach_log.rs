@@ -79,7 +79,7 @@ pub async fn log(
         crate::services::streams::publish_coach_log(&mut conn, &event).await;
     }
 
-    let ingest_url = std::env::var("INGEST_URL").unwrap_or_else(|_| "http://ingest:8001".into());
+    let ingest_url = std::env::var("INGEST_URL").unwrap_or_else(|_| "http://ws:8080".into());
     let content = format!("User: {}\nCoach: {}", req.user_message, req.reply);
     let container_tag = req.container_tag.clone();
     let tier2 = tier.clone();

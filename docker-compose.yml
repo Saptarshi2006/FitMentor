@@ -12,6 +12,7 @@ services:
       - "3000:3000"
     environment:
       REDIS_URL: redis://redis:6379
+      INGEST_URL: http://ws:8080
       PORT: "3000"
       POLAR_WEBHOOK_SECRET: ${POLAR_WEBHOOK_SECRET:-}
       CORS_ORIGIN: ${CORS_ORIGIN:-https://fitmentor-7lx.pages.dev}
@@ -30,20 +31,12 @@ services:
 
   ws:
     build:
-      context: .
-      dockerfile: apps/ws/Dockerfile
+      context: apps/ws
+      dockerfile: Dockerfile
     ports:
       - "8080:8080"
     environment:
       REDIS_URL: redis://redis:6379
-
-  ingest:
-    build:
-      context: .
-      dockerfile: apps/ingest-python/Dockerfile
-    ports:
-      - "8001:8001"
-    environment:
       SUPERMEMORY_API_KEY: ${SUPERMEMORY_API_KEY:-}
 
   planner:
