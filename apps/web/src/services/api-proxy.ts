@@ -67,7 +67,9 @@ export const proxyCheckout = createServerFn({ method: "POST" })
       headers: authHeaders(session.sub),
       body: JSON.stringify({ tier }),
     });
-    return await res.json();
+    const body = await res.json();
+    if (!res.ok) return { error: "payment_service_error" };
+    return body;
   });
 
 export const proxyMealPlan = createServerFn({ method: "GET" }).handler(async () => {

@@ -285,9 +285,10 @@ function PolarCheckout({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const plan = PLANS.find((p) => p.tier === tier);
+  const checkout = useServerFn(proxyCheckout);
 
   useEffect(() => {
-    proxyCheckout({ data: { tier } })
+    checkout({ data: { tier } })
       .then((data) => {
         if (data.checkout_url) {
           window.location.href = data.checkout_url;
