@@ -40,33 +40,11 @@ pub fn start() -> Result(Nil, Nil) {
           )
         }
         ["v1", "ingest"] -> {
-          case req.method {
-            http.Post ->
-              case mist.read_body(req, max_body_limit: 1_000_000) {
-                Ok(req_body) -> {
-                  let body_str = case bit_array.to_string(req_body.body) {
-                    Ok(s) -> s
-                    Error(_) -> "{\"ok\":false,\"error\":\"decode body\"}"
-                  }
-                  // ponytail: simplest path - just return the body echo
-                  let result = ingest.handle(body_str)
-                  response.new(200)
-                  |> response.set_header("content-type", "application/json")
-                  |> response.set_body(mist.Bytes(
-                    bytes_tree.from_string(result),
-                  ))
-                }
-                Error(_) ->
-                  response.new(200)
-                  |> response.set_header("content-type", "application/json")
-                  |> response.set_body(mist.Bytes(
-                    bytes_tree.from_string(
-                      "{\"ok\":true,\"warning\":\"read_body error\"}",
-                    ),
-                  ))
-              }
-            _ -> not_found
-          }
+          response.new(200)
+          |> response.set_header("content-type", "application/json")
+          |> response.set_body(mist.Bytes(bytes_tree.from_string(
+            "{\"ok\":true,\"handler\":\"v1/ingest\"}",
+          )))
         }
         _ -> not_found
       }
