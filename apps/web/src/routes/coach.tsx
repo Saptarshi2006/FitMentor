@@ -92,6 +92,12 @@ function Coach() {
   }, [loadSessions]);
 
   useEffect(() => {
+    if (!activeId && sessions.length > 0) {
+      switchSession(sessions[0].id);
+    }
+  }, [sessions]);
+
+  useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
