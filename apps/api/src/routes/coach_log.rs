@@ -20,9 +20,13 @@ pub async fn log(
     AuthUser { user_id, .. }: AuthUser,
     Json(req): Json<CoachLogRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    // Look up user's subscription tier
+    // Look up user's subscription tier (user_id from auth is cf_access_sub TEXT,
+    // subscriptions.user_id is UUID — join through users to resolve)
     let tier: String = sqlx::query_scalar(
-        "SELECT tier FROM subscriptions WHERE user_id = $1 AND status = 'active' LIMIT 1",
+        "SELECT s.tier FROM subscriptions s
+         JOIN users u ON s.user_id = u.id
+         WHERE u.cf_access_sub = $1 AND s.status = 'active'
+         LIMIT 1",
     )
     .bind(&user_id)
     .fetch_optional(&state.pool)
