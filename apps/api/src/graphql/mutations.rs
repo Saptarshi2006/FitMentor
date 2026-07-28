@@ -47,6 +47,21 @@ impl MutationRoot {
         let pool = gql_ctx.pool_for_user();
         let user = get_user_id(pool, &auth.user_id).await?;
 
+        if let Some(ref name) = input.name {
+            sqlx::query("UPDATE users SET name = $2, updated_at = now() WHERE id = $1")
+                .bind(user.id)
+                .bind(name)
+                .execute(pool)
+                .await?;
+        }
+
+        let _ = sqlx::query(
+            "INSERT INTO profiles (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING",
+        )
+        .bind(user.id)
+        .execute(pool)
+        .await;
+
         let profile = sqlx::query_as::<_, crate::models::profile::Profile>(
             r#"UPDATE profiles SET
                 name = COALESCE($2, name),

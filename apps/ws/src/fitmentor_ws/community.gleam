@@ -453,7 +453,7 @@ fn h_toggle_like(vars: String, user_id: String) -> String {
 }
 
 fn h_reply(vars: String, user_id: String) -> String {
-  let parent_id = extract_var_string(vars, "postId")
+  let parent_id = extract_var_string(vars, "parentId")
   let text = extract_var_string(vars, "text")
   let media = extract_var_raw(vars, "media", "[]")
   let body_json = "{\"text\":\"" <> json_esc(text) <> "\",\"media\":" <> media <> "}"
@@ -668,9 +668,23 @@ fn extract_op_name(body: String) -> String {
           False -> rest
         }
       }
-      string.to_graphemes(rest2)
+      let name = string.to_graphemes(rest2)
       |> list.take_while(fn(c) { c != "(" && c != " " && c != "{" })
       |> string.concat
+      case string.is_empty(name) {
+        True -> {
+          // Anonymous operation: find first field name after { or mutation {
+          let stripped = string.replace(rest2, "\n", "") |> string.trim
+          let stripped2 = case string.starts_with(stripped, "{") {
+            True -> string.drop_start(stripped, 1) |> string.trim
+            False -> stripped
+          }
+          string.to_graphemes(stripped2)
+          |> list.take_while(fn(c) { c != "(" && c != " " && c != "{" && c != "\n" })
+          |> string.concat
+        }
+        False -> name
+      }
     }
     _ -> ""
   }
