@@ -66,7 +66,8 @@ fn bool_str(b: Bool) -> String {
 }
 
 fn row_bool(row: Dynamic, key: String) -> Bool {
-  row_field(row, key) == "true"
+  let v = row_field(row, key)
+  v == "true" || v == "1"
 }
 
 fn row_int(row: Dynamic, key: String) -> Int {
