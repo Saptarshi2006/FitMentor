@@ -51,7 +51,7 @@ pub async fn log(
                 "content": &req.reply,
             }));
             if let Err(e) = sqlx::query(
-                "UPDATE chat_sessions SET messages = $1, updated_at = NOW() WHERE id = $2::uuid AND user_id = $3",
+                "UPDATE chat_sessions SET messages = $1, updated_at = NOW() WHERE id = CAST($2 AS uuid) AND user_id = $3",
             )
             .bind(serde_json::Value::Array(msgs))
             .bind(sid)
