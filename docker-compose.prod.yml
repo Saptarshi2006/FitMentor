@@ -42,6 +42,13 @@ services:
     environment:
       REDIS_URL: redis://redis:6379
       SUPERMEMORY_API_KEY: ${SUPERMEMORY_API_KEY:-}
+      DATABASE_URL: ${DATABASE_URL:-postgres://fitmentor:fitmentor123@fitmentor-db.czgo408gk3ra.ap-south-2.rds.amazonaws.com/fitmentor?sslmode=require}
+      R2_BUCKET: ${R2_BUCKET:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_REGION: ${R2_REGION:-auto}
+      R2_HOST: ${R2_HOST:-}
+      API_SHARED_SECRET: ${API_SHARED_SECRET:-f09f11011bc34820d552d63b608dbc3cc587a74c74b682e66f2423d4598e620d}
     restart: unless-stopped
 
   planner:
@@ -52,8 +59,8 @@ services:
       - "8002:8002"
     environment:
       DATABASE_URL: ${DATABASE_URL:-}
-      CF_ACCOUNT_ID: ${CF_ACCOUNT_ID:-}
-      CF_API_TOKEN: ${CF_API_TOKEN:-}
+      AI_WORKER_URL: ${AI_WORKER_URL:-https://fitmentor-7lx.pages.dev/api/ai/complete}
+      API_SHARED_SECRET: ${API_SHARED_SECRET:-}
       PORT: "8002"
       MODE: "http"
     restart: unless-stopped
