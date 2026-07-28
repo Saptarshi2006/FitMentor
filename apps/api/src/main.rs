@@ -45,6 +45,16 @@ async fn extract_auth_user(
             if api_key == state.api_shared_secret {
                 let user_id = headers.get("x-user-id").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
                 let email = headers.get("x-user-email").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+                if !user_id.is_empty() {
+                    let _ = sqlx::query(
+                        "INSERT INTO users (cf_access_sub, email) VALUES ($1, $2)
+                         ON CONFLICT (cf_access_sub) DO UPDATE SET email = EXCLUDED.email, updated_at = now()"
+                    )
+                    .bind(&user_id)
+                    .bind(&email)
+                    .execute(&state.pool)
+                    .await;
+                }
                 return Some(auth::middleware::AuthUser { user_id, email });
             }
         }
@@ -296,6 +306,104 @@ async fn run_migrations(pool: &PgPool) {
     .execute(pool)
     .await
     .expect("failed to create chat_sessions index");
+
+    // Community tables
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS community_posts (
+            id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id    TEXT NOT NULL,
+            body       JSONB NOT NULL DEFAULT '{}',
+            parent_id  UUID REFERENCES community_posts(id) ON DELETE CASCADE,
+            reshare_id UUID REFERENCES community_posts(id) ON DELETE SET NULL,
+            hidden     BOOLEAN NOT NULL DEFAULT false,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        "#,
+    )
+    .execute(pool)
+    .await
+    .expect("failed to create community_posts table");
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS community_likes (
+            post_id UUID NOT NULL REFERENCES community_posts(id) ON DELETE CASCADE,
+            user_id TEXT NOT NULL,
+            PRIMARY KEY (post_id, user_id)
+        );
+        "#,
+    )
+    .execute(pool)
+    .await
+    .expect("failed to create community_likes table");
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS community_notifications (
+            id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id    TEXT NOT NULL,
+            actor_id   TEXT NOT NULL,
+            post_id    UUID REFERENCES community_posts(id) ON DELETE CASCADE,
+            type       TEXT NOT NULL,
+            read       BOOLEAN NOT NULL DEFAULT false,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        "#,
+    )
+    .execute(pool)
+    .await
+    .expect("failed to create community_notifications table");
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS community_reports (
+            id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            reporter_id TEXT NOT NULL,
+            post_id     UUID NOT NULL REFERENCES community_posts(id) ON DELETE CASCADE,
+            reason      TEXT NOT NULL,
+            created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        "#,
+    )
+    .execute(pool)
+    .await
+    .expect("failed to create community_reports table");
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS community_blocks (
+            blocker_id  TEXT NOT NULL,
+            blocked_id  TEXT NOT NULL,
+            created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+            PRIMARY KEY (blocker_id, blocked_id)
+        );
+        "#,
+    )
+    .execute(pool)
+    .await
+    .expect("failed to create community_blocks table");
+
+    sqlx::query(r#"CREATE INDEX IF NOT EXISTS idx_community_posts_created ON community_posts(created_at DESC NULLS LAST)"#)
+        .execute(pool).await.expect("failed to create idx_community_posts_created");
+    sqlx::query(r#"CREATE INDEX IF NOT EXISTS idx_community_posts_parent ON community_posts(parent_id)"#)
+        .execute(pool).await.expect("failed to create idx_community_posts_parent");
+    sqlx::query(r#"CREATE INDEX IF NOT EXISTS idx_community_posts_user ON community_posts(user_id)"#)
+        .execute(pool).await.expect("failed to create idx_community_posts_user");
+    sqlx::query(r#"CREATE INDEX IF NOT EXISTS idx_community_likes_post ON community_likes(post_id)"#)
+        .execute(pool).await.expect("failed to create idx_community_likes_post");
+    sqlx::query(r#"CREATE INDEX IF NOT EXISTS idx_community_notifications_user ON community_notifications(user_id, created_at DESC)"#)
+        .execute(pool).await.expect("failed to create idx_community_notifications_user");
+    sqlx::query(r#"CREATE INDEX IF NOT EXISTS idx_community_notifications_unread ON community_notifications(user_id) WHERE NOT read"#)
+        .execute(pool).await.expect("failed to create idx_community_notifications_unread");
+    sqlx::query(r#"CREATE INDEX IF NOT EXISTS idx_community_reports_post ON community_reports(post_id)"#)
+        .execute(pool).await.expect("failed to create idx_community_reports_post");
+
+    // pg_trgm for text search
+    sqlx::query(r#"CREATE EXTENSION IF NOT EXISTS pg_trgm"#)
+        .execute(pool).await.expect("failed to create pg_trgm extension");
+    sqlx::query(r#"CREATE INDEX IF NOT EXISTS idx_community_posts_text_gin ON community_posts USING GIN (to_tsvector('english', body->>'text'))"#)
+        .execute(pool).await.expect("failed to create idx_community_posts_text_gin");
 
     tracing::info!("migrations complete");
 }

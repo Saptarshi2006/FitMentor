@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { MobileShell } from "@/components/MobileShell";
 import { loadProfile, useProfile, calcTargets, type Profile } from "@/utils/profile";
 import { loadLogs, saveLog, todayKey, last7, type DailyLog } from "@/utils/habits";
@@ -26,6 +26,16 @@ import {
   Sparkles,
   Loader,
   Dumbbell,
+  Search,
+  Bell,
+  Repeat2,
+  Image,
+  Video,
+  Mic,
+  MoreHorizontal,
+  Flag,
+  Ban,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -759,132 +769,554 @@ function FormAnalyzer() {
 interface Post {
   id: string;
   author: string;
+  user_id: string;
   text: string;
+  media: { type: string; url: string }[];
   likes: number;
-  replies: { author: string; text: string }[];
+  replies: { author: string; text: string; id: string; user_id: string }[];
   timestamp: number;
-  likedBy: string[];
-}
-
-const POSTS_KEY = "fitmentor.community.v1";
-
-function loadPosts(): Post[] {
-  try {
-    return JSON.parse(localStorage.getItem(POSTS_KEY) ?? "[]");
-  } catch {
-    return [];
-  }
-}
-
-function savePosts(posts: Post[]) {
-  localStorage.setItem(POSTS_KEY, JSON.stringify(posts));
+  likedByMe: boolean;
+  replyCount: number;
+  reshareCount: number;
+  reshareId: string | null;
+  parentId: string | null;
 }
 
 function CommunityFeed() {
-  const profile = loadProfile();
-  const [posts, setPosts] = useState<Post[]>(loadPosts);
+  const profile = useProfile();
+  const [posts, setPosts] = useState<Post[]>([]);
   const [newPost, setNewPost] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [posting, setPosting] = useState(false);
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Post[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [menuOpen, setMenuOpen] = useState<string | null>(null);
+  const [pendingMedia, setPendingMedia] = useState<
+    { type: string; file: File; preview: string }[]
+  >([]);
+  const [resharing, setResharing] = useState<string | null>(null);
 
-  const addPost = () => {
-    if (!newPost.trim()) return;
-    const p: Post = {
-      id: Date.now().toString(),
-      author: profile?.name ?? "Anonymous",
-      text: newPost.trim(),
-      likes: 0,
-      replies: [],
-      timestamp: Date.now(),
-      likedBy: [],
-    };
-    const updated = [p, ...posts];
-    setPosts(updated);
-    savePosts(updated);
-    setNewPost("");
-    toast.success("Posted in community!");
+  const userId = profile?.sub ?? "";
+
+  const loadFeed = useCallback(async () => {
+    try {
+      setLoading(true);
+      const { community } = await import("@/utils/community");
+      const data = await community.feed(undefined, 30);
+      const mapped = data.feed.map((p: any) => ({
+        id: p.id,
+        author: p.author_name || "User",
+        user_id: p.user_id,
+        text: p.body?.text ?? "",
+        media: p.body?.media ?? [],
+        likes: p.like_count,
+        replies: [],
+        timestamp: new Date(p.created_at).getTime(),
+        likedByMe: p.liked_by_me,
+        replyCount: p.reply_count,
+        reshareCount: p.reshare_count,
+        reshareId: p.reshare_id,
+        parentId: p.parent_id,
+      }));
+      setPosts(mapped);
+    } catch {
+      // silent fail
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    loadFeed();
+  }, [loadFeed]);
+
+  const loadNotifications = async () => {
+    try {
+      const { community } = await import("@/utils/community");
+      const [notifData, countData] = await Promise.all([
+        community.notifications(20),
+        community.unreadNotificationCount(),
+      ]);
+      setNotifications(notifData.notifications);
+      setUnreadCount(countData.unreadNotificationCount);
+    } catch {}
   };
 
-  const toggleLike = (postId: string) => {
-    const updated = posts.map((p) => {
-      if (p.id !== postId) return p;
-      const liked = p.likedBy.includes(profile?.name ?? "Anonymous");
-      return {
-        ...p,
-        likes: liked ? p.likes - 1 : p.likes + 1,
-        likedBy: liked
-          ? p.likedBy.filter((n) => n !== (profile?.name ?? "Anonymous"))
-          : [...p.likedBy, profile?.name ?? "Anonymous"],
+  const addPost = async () => {
+    if (!newPost.trim() && pendingMedia.length === 0) return;
+    setPosting(true);
+    try {
+      const { community, uploadToR2 } = await import("@/utils/community");
+      const media: { type: string; url: string }[] = [];
+      for (const m of pendingMedia) {
+        const url = await uploadToR2(m.file);
+        media.push({ type: m.type, url });
+      }
+      const result = await community.createPost(newPost.trim(), media);
+      const p = result.createPost;
+      const newPostObj: Post = {
+        id: p.id,
+        author: p.author_name || profile?.name || "You",
+        user_id: userId,
+        text: p.body?.text ?? newPost.trim(),
+        media: p.body?.media ?? media,
+        likes: 0,
+        replies: [],
+        timestamp: Date.now(),
+        likedByMe: false,
+        replyCount: 0,
+        reshareCount: 0,
+        reshareId: null,
+        parentId: null,
       };
-    });
-    setPosts(updated);
-    savePosts(updated);
+      setPosts((prev) => [newPostObj, ...prev]);
+      setNewPost("");
+      setPendingMedia([]);
+      toast.success("Posted!");
+    } catch {
+      toast.error("Failed to post");
+    }
+    setPosting(false);
   };
 
-  const addReply = (postId: string) => {
+  const toggleLike = async (postId: string) => {
+    try {
+      const { community } = await import("@/utils/community");
+      const result = await community.toggleLike(postId);
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId
+            ? {
+                ...p,
+                likedByMe: result.toggleLike.liked,
+                likes: result.toggleLike.count,
+              }
+            : p,
+        ),
+      );
+    } catch {}
+  };
+
+  const addReply = async (postId: string) => {
     if (!replyText.trim()) return;
-    const updated = posts.map((p) => {
-      if (p.id !== postId) return p;
-      return {
-        ...p,
-        replies: [...p.replies, { author: profile?.name ?? "Anonymous", text: replyText.trim() }],
-      };
-    });
-    setPosts(updated);
-    savePosts(updated);
-    setReplyText("");
-    setReplyTo(null);
+    try {
+      const { community } = await import("@/utils/community");
+      const result = await community.replyToPost(postId, replyText.trim());
+      setPosts((prev) =>
+        prev.map((p) => ({
+          ...p,
+          replyCount: p.id === postId ? p.replyCount + 1 : p.replyCount,
+        })),
+      );
+      setReplyText("");
+      setReplyTo(null);
+      toast.success("Replied!");
+    } catch {
+      toast.error("Failed to reply");
+    }
   };
+
+  const reshare = async (postId: string) => {
+    setResharing(postId);
+    try {
+      const { community } = await import("@/utils/community");
+      const result = await community.resharePost(postId);
+      const p = result.resharePost;
+      setPosts((prev) => [
+        {
+          id: p.id,
+          author: p.author_name || "You",
+          user_id: userId,
+          text: p.body?.text ?? "",
+          media: p.body?.media ?? [],
+          likes: 0,
+          replies: [],
+          timestamp: Date.now(),
+          likedByMe: false,
+          replyCount: 0,
+          reshareCount: 0,
+          reshareId: postId,
+          parentId: null,
+        },
+        ...prev,
+      ]);
+      toast.success("Reshared!");
+    } catch {
+      toast.error("Failed to reshare");
+    }
+    setResharing(null);
+  };
+
+  const handleMedia = (type: string) => {
+    const input = document.createElement("input");
+    input.type = type === "image" ? "file" : type === "video" ? "file" : "file";
+    if (type === "image") input.accept = "image/*";
+    else if (type === "video") input.accept = "video/*";
+    else if (type === "audio") input.accept = "audio/*";
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const preview = URL.createObjectURL(file);
+      setPendingMedia((prev) => [...prev, { type, file, preview }]);
+    };
+    input.click();
+  };
+
+  const removeMedia = (index: number) => {
+    setPendingMedia((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+    setIsSearching(true);
+    try {
+      const { community } = await import("@/utils/community");
+      const data = await community.search(searchQuery.trim());
+      setSearchResults(
+        data.search.map((p: any) => ({
+          id: p.id,
+          author: p.author_name || "User",
+          user_id: p.user_id,
+          text: p.body?.text ?? "",
+          media: p.body?.media ?? [],
+          likes: p.like_count,
+          replies: [],
+          timestamp: new Date(p.created_at).getTime(),
+          likedByMe: p.liked_by_me,
+          replyCount: p.reply_count,
+          reshareCount: p.reshare_count,
+          reshareId: p.reshare_id,
+          parentId: p.parent_id,
+        })),
+      );
+    } catch {}
+  };
+
+  const deletePost = async (postId: string) => {
+    try {
+      const { community } = await import("@/utils/community");
+      await community.deletePost(postId);
+      setPosts((prev) => prev.filter((p) => p.id !== postId));
+      toast.success("Deleted");
+    } catch {}
+    setMenuOpen(null);
+  };
+
+  const reportPost = async (postId: string) => {
+    try {
+      const { community } = await import("@/utils/community");
+      await community.reportPost(postId, "Reported by user");
+      toast.success("Reported");
+    } catch {}
+    setMenuOpen(null);
+  };
+
+  const blockUser = async (blockedId: string) => {
+    try {
+      const { community } = await import("@/utils/community");
+      await community.blockUser(blockedId);
+      setPosts((prev) => prev.filter((p) => p.user_id !== blockedId));
+      toast.success("User blocked");
+    } catch {}
+    setMenuOpen(null);
+  };
+
+  const displayPosts = isSearching ? searchResults : posts;
 
   return (
     <div className="space-y-5 pt-4">
       <div className="rounded-2xl border border-border/60 bg-card p-5">
-        <h2 className="flex items-center gap-2 text-lg font-bold">
-          <Users className="h-5 w-5 text-primary" /> Community Feed
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Share your progress, ask questions, motivate others
-        </p>
-        <div className="mt-4 flex gap-2">
-          <Input
+        <div className="flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-lg font-bold">
+            <Users className="h-5 w-5 text-primary" /> Community
+          </h2>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setShowNotifications(!showNotifications);
+                if (!showNotifications) loadNotifications();
+              }}
+              className="relative rounded-full p-1.5 hover:bg-muted"
+            >
+              <Bell className="h-4 w-4" />
+              {unreadCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {showNotifications && (
+          <div className="mt-3 rounded-xl border border-border/60 bg-background p-3">
+            <p className="mb-2 text-xs font-semibold text-muted-foreground">
+              Notifications
+            </p>
+            {notifications.length === 0 && (
+              <p className="py-2 text-center text-xs text-muted-foreground">
+                No notifications yet
+              </p>
+            )}
+            {notifications.slice(0, 10).map((n: any) => (
+              <div
+                key={n.id}
+                className={cn(
+                  "flex items-start gap-2 rounded-lg px-2 py-1.5 text-xs",
+                  !n.read && "bg-primary/5",
+                )}
+              >
+                <span className="text-muted-foreground">
+                  {n.type === "like"
+                    ? "❤️"
+                    : n.type === "reply"
+                      ? "💬"
+                      : "🔁"}
+                </span>
+                <span>
+                  <span className="font-semibold">{n.actor_id.split(":").pop()}</span>{" "}
+                  {n.type === "like"
+                    ? "liked your post"
+                    : n.type === "reply"
+                      ? "replied to your post"
+                      : "reshared your post"}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-3 flex gap-2">
+          <input
+            type="text"
+            placeholder="Search community..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleSearch();
+              if (e.key === "Escape") {
+                setSearchQuery("");
+                setSearchResults([]);
+                setIsSearching(false);
+              }
+            }}
+            className="flex-1 rounded-xl border border-border/60 bg-background px-3 py-2 text-sm outline-none"
+          />
+          <Button size="icon" variant="outline" onClick={handleSearch}>
+            <Search className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="mt-3">
+          <textarea
             placeholder="Share something with the community..."
             value={newPost}
             onChange={(e) => setNewPost(e.target.value)}
-            className="flex-1"
+            className="w-full resize-none rounded-xl border border-border/60 bg-background p-3 text-sm outline-none"
+            rows={2}
           />
-          <Button size="icon" onClick={addPost} disabled={!newPost.trim()}>
-            <Send className="h-4 w-4" />
-          </Button>
+          {pendingMedia.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {pendingMedia.map((m, i) => (
+                <div key={i} className="relative">
+                  {m.type === "image" && (
+                    <img
+                      src={m.preview}
+                      className="h-16 w-16 rounded-lg object-cover"
+                    />
+                  )}
+                  {m.type === "video" && (
+                    <video
+                      src={m.preview}
+                      className="h-16 w-16 rounded-lg object-cover"
+                    />
+                  )}
+                  {m.type === "audio" && (
+                    <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-muted">
+                      <Mic className="h-6 w-6 text-muted-foreground" />
+                    </div>
+                  )}
+                  <button
+                    onClick={() => removeMedia(i)}
+                    className="absolute -right-1 -top-1 rounded-full bg-destructive p-0.5 text-destructive-foreground"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="mt-2 flex items-center justify-between">
+            <div className="flex gap-1">
+              <button
+                onClick={() => handleMedia("image")}
+                className="rounded-lg p-1.5 hover:bg-muted"
+              >
+                <Image className="h-4 w-4 text-muted-foreground" />
+              </button>
+              <button
+                onClick={() => handleMedia("video")}
+                className="rounded-lg p-1.5 hover:bg-muted"
+              >
+                <Video className="h-4 w-4 text-muted-foreground" />
+              </button>
+              <button
+                onClick={() => handleMedia("audio")}
+                className="rounded-lg p-1.5 hover:bg-muted"
+              >
+                <Mic className="h-4 w-4 text-muted-foreground" />
+              </button>
+            </div>
+            <Button
+              size="sm"
+              onClick={addPost}
+              disabled={posting || (!newPost.trim() && pendingMedia.length === 0)}
+            >
+              {posting ? (
+                <Loader className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
         </div>
+
+        {isSearching && (
+          <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+            <span>Search results for "{searchQuery}"</span>
+            <button
+              onClick={() => {
+                setSearchQuery("");
+                setSearchResults([]);
+                setIsSearching(false);
+              }}
+              className="text-primary hover:underline"
+            >
+              Clear
+            </button>
+          </div>
+        )}
+
         <div className="mt-5 space-y-3">
-          {posts.length === 0 && (
+          {loading && (
+            <div className="py-8 text-center">
+              <Loader className="mx-auto h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          )}
+          {!loading && displayPosts.length === 0 && (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              No posts yet. Be the first to share!
+              {isSearching
+                ? "No results found"
+                : "No posts yet. Be the first to share!"}
             </p>
           )}
-          {posts.map((post) => (
-            <div key={post.id} className="rounded-xl border border-border/60 bg-background p-3.5">
+          {displayPosts.map((post) => (
+            <div
+              key={post.id}
+              className="rounded-xl border border-border/60 bg-background p-3.5"
+            >
+              {post.reshareId && (
+                <div className="mb-2 flex items-center gap-1 text-[10px] text-muted-foreground">
+                  <Repeat2 className="h-3 w-3" />
+                  <span>Reshared</span>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/20 text-xs font-bold text-primary">
-                    {post.author[0].toUpperCase()}
+                    {(post.author[0] ?? "U").toUpperCase()}
                   </div>
-                  <span className="text-sm font-semibold">{post.author}</span>
-                  <span className="text-[10px] text-muted-foreground">
-                    {new Date(post.timestamp).toLocaleDateString("en-IN", {
-                      day: "numeric",
-                      month: "short",
-                    })}
-                  </span>
+                  <div>
+                    <span className="text-sm font-semibold">
+                      {post.author}
+                    </span>
+                    <span className="ml-2 text-[10px] text-muted-foreground">
+                      {new Date(post.timestamp).toLocaleDateString("en-IN", {
+                        day: "numeric",
+                        month: "short",
+                      })}
+                    </span>
+                  </div>
+                </div>
+                <div className="relative">
+                  <button
+                    onClick={() =>
+                      setMenuOpen(menuOpen === post.id ? null : post.id)
+                    }
+                    className="rounded p-1 hover:bg-muted"
+                  >
+                    <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+                  </button>
+                  {menuOpen === post.id && (
+                    <div className="absolute right-0 top-8 z-20 w-40 rounded-xl border border-border/60 bg-card p-1 shadow-lg">
+                      {post.user_id === userId ? (
+                        <button
+                          onClick={() => deletePost(post.id)}
+                          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-red-500 hover:bg-muted"
+                        >
+                          <Trash2 className="h-3 w-3" /> Delete
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => reportPost(post.id)}
+                            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs hover:bg-muted"
+                          >
+                            <Flag className="h-3 w-3" /> Report
+                          </button>
+                          <button
+                            onClick={() => blockUser(post.user_id)}
+                            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs hover:bg-muted"
+                          >
+                            <Ban className="h-3 w-3" /> Block user
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
-              <p className="mt-2 text-sm">{post.text}</p>
-              <div className="mt-3 flex items-center gap-3">
+              <p className="mt-2 text-sm whitespace-pre-wrap">{post.text}</p>
+              {post.media.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {post.media.map((m, i) => (
+                    <div key={i}>
+                      {m.type === "image" && (
+                        <img
+                          src={m.url}
+                          className="max-h-48 rounded-lg object-cover"
+                          loading="lazy"
+                        />
+                      )}
+                      {m.type === "video" && (
+                        <video
+                          src={m.url}
+                          controls
+                          className="max-h-48 rounded-lg"
+                        />
+                      )}
+                      {m.type === "audio" && (
+                        <audio src={m.url} controls className="w-64" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="mt-3 flex items-center gap-4">
                 <button
                   onClick={() => toggleLike(post.id)}
                   className={cn(
                     "flex items-center gap-1 text-xs transition-colors",
-                    post.likedBy.includes(profile?.name ?? "Anonymous")
+                    post.likedByMe
                       ? "text-primary"
                       : "text-muted-foreground hover:text-foreground",
                   )}
@@ -892,29 +1324,33 @@ function CommunityFeed() {
                   <Heart
                     className={cn(
                       "h-3.5 w-3.5",
-                      post.likedBy.includes(profile?.name ?? "Anonymous") && "fill-primary",
+                      post.likedByMe && "fill-primary",
                     )}
                   />
                   {post.likes}
                 </button>
                 <button
-                  onClick={() => setReplyTo(replyTo === post.id ? null : post.id)}
+                  onClick={() =>
+                    setReplyTo(replyTo === post.id ? null : post.id)
+                  }
                   className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
                 >
                   <MessageCircle className="h-3.5 w-3.5" />
-                  {post.replies.length}
+                  {post.replyCount}
+                </button>
+                <button
+                  onClick={() => reshare(post.id)}
+                  disabled={resharing === post.id}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  {resharing === post.id ? (
+                    <Loader className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Repeat2 className="h-3.5 w-3.5" />
+                  )}
+                  {post.reshareCount}
                 </button>
               </div>
-              {post.replies.length > 0 && (
-                <div className="mt-2 space-y-1.5 border-t border-border/30 pt-2">
-                  {post.replies.map((r, i) => (
-                    <div key={i} className="flex items-start gap-2 text-xs">
-                      <span className="mt-0.5 font-semibold">{r.author}:</span>
-                      <span className="text-muted-foreground">{r.text}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
               {replyTo === post.id && (
                 <div className="mt-2 flex gap-2">
                   <Input
@@ -922,9 +1358,15 @@ function CommunityFeed() {
                     value={replyText}
                     onChange={(e) => setReplyText(e.target.value)}
                     className="flex-1 text-xs"
-                    onKeyDown={(e) => e.key === "Enter" && addReply(post.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") addReply(post.id);
+                    }}
                   />
-                  <Button size="sm" onClick={() => addReply(post.id)} disabled={!replyText.trim()}>
+                  <Button
+                    size="sm"
+                    onClick={() => addReply(post.id)}
+                    disabled={!replyText.trim()}
+                  >
                     Reply
                   </Button>
                 </div>
