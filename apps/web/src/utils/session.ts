@@ -2,7 +2,7 @@ const SESSION_TTL = 60 * 60; // 1 hour
 const REMEMBER_TTL = 60 * 60 * 24 * 7; // 7 days
 const TOKEN_MAX_AGE = 60 * 60; // 1 hour — signed token lifetime
 
-function getCloudflareEnv(): Record<string, unknown> | null {
+export function getCloudflareEnv(): Record<string, unknown> | null {
   // 1. Try TanStack Start ALS event storage (works in server functions)
   try {
     const key = Symbol.for("tanstack-start:event-storage");
