@@ -1061,7 +1061,7 @@ services:
     environment:
       POSTGRES_DB: fitmentor
       POSTGRES_USER: fitmentor
-      POSTGRES_PASSWORD: fitmentor_dev
+      POSTGRES_PASSWORD: CHANGEME
     ports: ["5432:5432"]
     volumes: ["pgdata:/var/lib/postgresql/data"]
 
@@ -1082,7 +1082,7 @@ services:
     build: ./rust-api
     ports: ["3000:3000"]
     environment:
-      DATABASE_URL: postgres://fitmentor:fitmentor_dev@postgres:5432/fitmentor
+      DATABASE_URL: postgres://fitmentor:CHANGEME@postgres:5432/fitmentor
       MONGO_URL: mongodb://mongo:27017/fitmentor
       REDIS_URL: redis://redis:6379
       TB_ADDRESS: tigerbeetle:3001

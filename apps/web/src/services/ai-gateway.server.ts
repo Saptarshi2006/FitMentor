@@ -37,7 +37,7 @@ export async function chatCompletion(opts: {
   tier?: string;
 }): Promise<string> {
   if (opts.userId) {
-    const apiUrl = process.env.API_URL || "https://16-112-132-239.sslip.io";
+    const apiUrl = process.env.API_URL || "";
     const apiKey = process.env.API_SHARED_SECRET;
     const res = await fetch(`${apiUrl}/v1/internal/quota/check-and-consume`, {
       method: "POST",

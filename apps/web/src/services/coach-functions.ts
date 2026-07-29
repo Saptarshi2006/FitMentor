@@ -37,7 +37,7 @@ const Input = z.object({
   user_email: z.string().optional(),
 });
 
-const apiUrl = process.env.API_URL || "https://16-112-132-239.sslip.io";
+const apiUrl = process.env.API_URL || "";
 
 export const askCoach = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => Input.parse(d))

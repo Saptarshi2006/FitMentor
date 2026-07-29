@@ -121,7 +121,7 @@ function getApiKey(): string {
 
 async function checkUserExists(sub: string): Promise<boolean> {
   const cfEnv = getCloudflareEnv() as Record<string, string> | null;
-  const apiUrl = process.env.API_URL || cfEnv?.API_URL || "https://16-112-132-239.sslip.io";
+  const apiUrl = process.env.API_URL || cfEnv?.API_URL || "";
   const apiKey = getApiKey();
   if (!apiKey) return false;
   try {
@@ -142,7 +142,7 @@ async function checkUserExists(sub: string): Promise<boolean> {
 
 async function syncUser(sub: string, email: string, name: string): Promise<boolean> {
   const cfEnv = getCloudflareEnv() as Record<string, string> | null;
-  const apiUrl = process.env.API_URL || cfEnv?.API_URL || "https://16-112-132-239.sslip.io";
+  const apiUrl = process.env.API_URL || cfEnv?.API_URL || "";
   const apiKey = getApiKey();
   if (!apiKey) return false;
   try {

@@ -80,7 +80,7 @@ Both run on the same EC2 instance as the backend API.
 ## Open Issues / Risks
 
 1. **React error #31 (Invalid Hook Call) in production**: `index-D4xrrhOK.js` throws Minified React error #31. Root cause: `apps/web/package.json` has duplicate `graphql` entries (line 59: `^16.14.2`, line 84: `^16.9.0`) and duplicate `graphql-request` entries (line 60: `^7.4.0`, line 83: `^7.1.0`). These conflicting versions cause npm to install mismatched copies, which can lead to duplicate React instances in the Cloudflare Workers production bundle. **Fix**: Remove the duplicate entries on lines 83-84 of `apps/web/package.json`.
-2. **API_URL uses sslip.io fixed IP**: Frontend proxies through `https://16-112-132-239.sslip.io` for security (hides actual EC2 IP). This IP must remain mapped to the EC2 instance. If the EC2 instance changes, this IP mapping breaks.
+2. **API_URL uses sslip.io fixed IP**: Frontend proxies through the production `API_URL` env var for security (hides actual EC2 IP). This IP must remain mapped to the EC2 instance. If the EC2 instance changes, this IP mapping breaks.
 3. **No CI/CD pipeline**: Deployment is manual. No GitHub Actions workflows exist in `.github/`.
 4. **WebSocket service**: Gleam WebSocket service exists (`apps/ws/`) but has no active deployment target referenced. Previously configured for Fly.io (`fly.toml`), which is not used. Needs a deployment target (AWS EC2 or other).
 5. **Daily planner Cloudflare AI dependency**: The planner uses `CF_ACCOUNT_ID` and `CF_API_TOKEN` stored on the EC2 instance, creating a dependency on Cloudflare credentials being present on AWS.
