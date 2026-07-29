@@ -1,6 +1,7 @@
 import fitmentor_ws/community
 import fitmentor_ws/ingest
 import fitmentor_ws/jwt
+import fitmentor_ws/planner/generate as planner
 import fitmentor_ws/ws_handler
 import gleam/bit_array
 import gleam/bytes_tree
@@ -11,6 +12,7 @@ import gleam/result
 import gleam/http
 import gleam/string
 import mist
+import pog
 
 fn handle_community(req: request.Request(BitArray), user_id: String) -> response.Response(mist.ResponseData) {
   let body_str = case bit_array.to_string(req.body) {
@@ -35,7 +37,37 @@ fn handle_ingest(req: request.Request(BitArray)) -> response.Response(mist.Respo
   |> response.set_body(mist.Bytes(bytes_tree.from_string(result)))
 }
 
-pub fn start() -> Result(Nil, Nil) {
+fn handle_planner(req: request.Request(BitArray), db_conn: pog.Connection) -> response.Response(mist.ResponseData) {
+  let body_str = case bit_array.to_string(req.body) {
+    Ok(s) -> s
+    Error(_) -> ""
+  }
+  // parse user_id from JSON body
+  let user_id = find_json_string(body_str, "user_id")
+  let result = case user_id {
+    "" -> "{\"error\":\"missing user_id\"}"
+    id -> planner.handle(id, db_conn)
+  }
+  response.new(200)
+  |> response.set_header("content-type", "application/json")
+  |> response.set_header("access-control-allow-origin", "*")
+  |> response.set_body(mist.Bytes(bytes_tree.from_string(result)))
+}
+
+fn find_json_string(json: String, key: String) -> String {
+  let needle = "\"" <> key <> "\":\""
+  case string.split(json, needle) {
+    [_, rest, ..] -> {
+      case string.split(rest, "\"") {
+        [val, ..] -> val
+        _ -> ""
+      }
+    }
+    _ -> ""
+  }
+}
+
+pub fn start(db_conn: pog.Connection) -> Result(Nil, Nil) {
   jwt.throttle_init()
 
   let cors_preflight =
@@ -81,6 +113,14 @@ pub fn start() -> Result(Nil, Nil) {
           mist.read_body(req, max_body_limit: 1_000_000)
           |> result.map(handle_ingest)
           |> result.lazy_unwrap(fn() { body_err })
+        ["v1", "planner", "generate"] ->
+          case req.method {
+            http.Options -> cors_preflight
+            _ ->
+              mist.read_body(req, max_body_limit: 1_000_000)
+              |> result.map(fn(r) { handle_planner(r, db_conn) })
+              |> result.lazy_unwrap(fn() { body_err })
+          }
         ["v1", "community", "graphql"] ->
           case req.method {
             http.Options -> cors_preflight

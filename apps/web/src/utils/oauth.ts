@@ -70,9 +70,10 @@ export function useAuth() {
 export const getDiscordAuthUrl = createServerFn({ method: "GET" })
   .validator((d?: { mode?: string }) => d ?? {})
   .handler(async (ctx) => {
-    const clientId = process.env.DISCORD_CLIENT_ID || (getCloudflareEnv() as any)?.DISCORD_CLIENT_ID || "";
-    const appUrl = process.env.APP_URL || "https://fitmentor-7lx.pages.dev";
-    const redirectUri = `${appUrl}/auth/discord/callback`;
+    const cfEnv = getCloudflareEnv() as Record<string, string> | null;
+    const clientId = process.env.DISCORD_CLIENT_ID || cfEnv?.DISCORD_CLIENT_ID || "";
+    const appUrl = process.env.APP_URL || cfEnv?.APP_URL || "https://fitmentor-7lx.pages.dev";
+    const redirectUri = `${appUrl.replace(/\/+$/, "")}/auth/discord/callback`;
     const url = new URL("https://discord.com/api/oauth2/authorize");
     url.searchParams.set("client_id", clientId);
     url.searchParams.set("redirect_uri", redirectUri);
@@ -103,19 +104,10 @@ function getClientIp(): string {
 }
 
 function getApiKey(): string {
-  // Try process.env first (works in local dev / Node)
   const fromProcess = process.env.API_SHARED_SECRET;
   if (fromProcess) return fromProcess;
-  // Fall back to Cloudflare env binding
-  try {
-    const key = Symbol.for("tanstack-start:event-storage");
-    const store = (globalThis as any)[key]?.getStore?.();
-    const event: any = store?.h3Event;
-    const cfEnv = event?.context?.cloudflare?.env ?? event?.context?.env ?? event?.req?.runtime?.cloudflare?.env;
-    if (cfEnv?.API_SHARED_SECRET) return cfEnv.API_SHARED_SECRET as string;
-  } catch {}
-  const fromGlobal = (globalThis as any).__cf_env?.API_SHARED_SECRET;
-  if (fromGlobal) return fromGlobal as string;
+  const cfEnv = getCloudflareEnv();
+  if (cfEnv) return (cfEnv.API_SHARED_SECRET as string) ?? "";
   return "";
 }
 
@@ -169,7 +161,7 @@ export const exchangeDiscordCode = createServerFn({ method: "POST" })
     const clientId = process.env.DISCORD_CLIENT_ID || cfEnv?.DISCORD_CLIENT_ID || "";
     const clientSecret = process.env.DISCORD_CLIENT_SECRET || cfEnv?.DISCORD_CLIENT_SECRET || "";
     const appUrl = process.env.APP_URL || cfEnv?.APP_URL || "https://fitmentor-7lx.pages.dev";
-    const redirectUri = `${appUrl}/auth/discord/callback`;
+    const redirectUri = `${appUrl.replace(/\/+$/, "")}/auth/discord/callback`;
 
     const tokenRes = await fetch("https://discord.com/api/oauth2/token", {
       method: "POST",
@@ -183,7 +175,11 @@ export const exchangeDiscordCode = createServerFn({ method: "POST" })
       }),
     });
 
-    if (!tokenRes.ok) return { ok: false, error: "token_exchange_failed" } as const;
+    if (!tokenRes.ok) {
+      const errBody = await tokenRes.text();
+      console.error("Discord token exchange failed:", tokenRes.status, errBody, "redirect_uri:", redirectUri, "client_id:", clientId, "has_secret:", !!clientSecret, "secret_len:", clientSecret?.length);
+      return { ok: false, error: `token_exchange_failed: ${errBody}` } as const;
+    }
     const tokenData = await tokenRes.json();
 
     const userRes = await fetch("https://discord.com/api/users/@me", {
@@ -235,15 +231,6 @@ export function logout() {
 }
 
 export const clearSession = createServerFn({ method: "POST" }).handler(async () => {
-  const raw = getCookie(SESSION_COOKIE);
-  if (raw) {
-    const sid = await extractSessionId(raw);
-    if (sid) {
-      const session = await getSession(sid);
-      if (session?.rememberToken) await deleteRememberToken(session.rememberToken);
-      await deleteSession(sid);
-    }
-  }
   clearSessionCookie();
   return { ok: true } as const;
 });

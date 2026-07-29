@@ -45,7 +45,7 @@ impl Config {
             api_shared_secret: std::env::var("API_SHARED_SECRET")
                 .unwrap_or_default(),
             planner_url: std::env::var("PLANNER_URL")
-                .unwrap_or_else(|_| "http://planner:8002".into()),
+                .unwrap_or_else(|_| "http://ws:8080/v1/planner".into()),
             cors_origin: std::env::var("CORS_ORIGIN")
                 .unwrap_or_else(|_| "https://fitmentor-7lx.pages.dev".into()),
             app_url: std::env::var("APP_URL")
