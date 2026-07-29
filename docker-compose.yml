@@ -37,9 +37,6 @@ services:
       - "8080:8080"
     environment:
       REDIS_URL: redis://redis:6379
-      DATABASE_URL: ${DATABASE_URL}
-      AI_WORKER_URL: ${AI_WORKER_URL}
-      API_SHARED_SECRET: ${API_SHARED_SECRET}
       SUPERMEMORY_API_KEY: ${SUPERMEMORY_API_KEY:-}
 
   planner:

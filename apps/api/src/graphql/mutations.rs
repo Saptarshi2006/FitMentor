@@ -101,7 +101,7 @@ impl MutationRoot {
         gql_ctx.cache.invalidate_user(&user.id.to_string()).await;
 
         // Trigger daily-planner (fire-and-forget)
-        let planner_url = std::env::var("PLANNER_URL").unwrap_or_else(|_| "http://ws:8080/v1/planner".into());
+        let planner_url = std::env::var("PLANNER_URL").unwrap_or_else(|_| "http://planner:8002".into());
         let user_id = auth.user_id.clone();
         tokio::spawn(async move {
             let _ = reqwest::Client::new()
