@@ -31,13 +31,13 @@ pub async fn checkout(
         ));
     }
 
-    let price_id = match req.tier.as_str() {
-        "premium" => &state.polar_premium_price_id,
-        "pro" => &state.polar_pro_price_id,
+    let product_id = match req.tier.as_str() {
+        "premium" => &state.polar_premium_product_id,
+        "pro" => &state.polar_pro_product_id,
         _ => unreachable!(),
     };
 
-    if state.polar_access_token.is_empty() || price_id.is_empty() {
+    if state.polar_access_token.is_empty() || product_id.is_empty() {
         return Err(crate::error::AppError::BadRequest(
             "Polar.sh not configured. Set POLAR_ACCESS_TOKEN and product IDs.".into(),
         ));
@@ -46,11 +46,10 @@ pub async fn checkout(
     // Call Polar API to create checkout session
     let client = reqwest::Client::new();
     let resp = client
-        .post("https://api.polar.sh/v1/checkouts")
+        .post("https://api.polar.sh/v1/checkouts/")
         .bearer_auth(&state.polar_access_token)
         .json(&serde_json::json!({
-            "products": [],
-            "price_id": price_id,
+            "products": [product_id],
             "success_url": "https://fitmentor-7lx.pages.dev/profile?checkout=success",
             "metadata": {
                 "user_id": user_id,

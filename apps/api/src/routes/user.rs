@@ -165,6 +165,21 @@ pub async fn update_profile(
 ) -> Result<Response, AppError> {
     let user = get_user_by_cf_sub(&state.pool, &auth.user_id).await?;
 
+    if let Some(ref name) = input.name {
+        sqlx::query("UPDATE users SET name = $2, updated_at = now() WHERE id = $1")
+            .bind(user.id)
+            .bind(name)
+            .execute(&state.pool)
+            .await?;
+    }
+
+    let _ = sqlx::query(
+        "INSERT INTO profiles (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING",
+    )
+    .bind(user.id)
+    .execute(&state.pool)
+    .await;
+
     let profile = sqlx::query_as::<_, Profile>(
         r#"UPDATE profiles SET
             name = COALESCE($2, name),

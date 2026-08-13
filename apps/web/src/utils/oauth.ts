@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getCookie, setResponseHeader } from "@tanstack/react-start/server";
-import { getSession, createSession, deleteSession, renewSession, deleteRememberToken, extractSessionId, resolveSessionFromToken } from "@/utils/session";
+import { getSession, createSession, deleteSession, renewSession, deleteRememberToken, extractSessionId, resolveSessionFromToken, getCloudflareEnv } from "@/utils/session";
 import { useState, useEffect } from "react";
 
 interface DiscordUser {
@@ -70,9 +70,10 @@ export function useAuth() {
 export const getDiscordAuthUrl = createServerFn({ method: "GET" })
   .validator((d?: { mode?: string }) => d ?? {})
   .handler(async (ctx) => {
-    const clientId = process.env.DISCORD_CLIENT_ID || "";
-    const appUrl = process.env.APP_URL || "https://fitmentor-7lx.pages.dev";
-    const redirectUri = `${appUrl}/auth/discord/callback`;
+    const cfEnv = getCloudflareEnv() as Record<string, string> | null;
+    const clientId = process.env.DISCORD_CLIENT_ID || cfEnv?.DISCORD_CLIENT_ID || "";
+    const appUrl = process.env.APP_URL || cfEnv?.APP_URL || "https://fitmentor-7lx.pages.dev";
+    const redirectUri = `${appUrl.replace(/\/+$/, "")}/auth/discord/callback`;
     const url = new URL("https://discord.com/api/oauth2/authorize");
     url.searchParams.set("client_id", clientId);
     url.searchParams.set("redirect_uri", redirectUri);
@@ -102,9 +103,18 @@ function getClientIp(): string {
   }
 }
 
+function getApiKey(): string {
+  const fromProcess = process.env.API_SHARED_SECRET;
+  if (fromProcess) return fromProcess;
+  const cfEnv = getCloudflareEnv();
+  if (cfEnv) return (cfEnv.API_SHARED_SECRET as string) ?? "";
+  return "";
+}
+
 async function checkUserExists(sub: string): Promise<boolean> {
-  const apiUrl = process.env.API_URL || "https://16-112-132-239.sslip.io";
-  const apiKey = process.env.API_SHARED_SECRET;
+  const cfEnv = getCloudflareEnv() as Record<string, string> | null;
+  const apiUrl = process.env.API_URL || cfEnv?.API_URL || "";
+  const apiKey = getApiKey();
   if (!apiKey) return false;
   try {
     const res = await fetch(`${apiUrl}/v1/user/exists`, {
@@ -122,14 +132,36 @@ async function checkUserExists(sub: string): Promise<boolean> {
   }
 }
 
+async function syncUser(sub: string, email: string, name: string): Promise<boolean> {
+  const cfEnv = getCloudflareEnv() as Record<string, string> | null;
+  const apiUrl = process.env.API_URL || cfEnv?.API_URL || "";
+  const apiKey = getApiKey();
+  if (!apiKey) return false;
+  try {
+    const res = await fetch(`${apiUrl}/v1/user/sync`, {
+      method: "POST",
+      headers: {
+        "X-Api-Key": apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ cf_sub: sub, email, name }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export const exchangeDiscordCode = createServerFn({ method: "POST" })
   .validator(discordCodec)
   .handler(async (ctx) => {
     const { code, state } = ctx.data;
 
-    const clientId = process.env.DISCORD_CLIENT_ID || "";
-    const clientSecret = process.env.DISCORD_CLIENT_SECRET || "";
-    const redirectUri = `${process.env.APP_URL || "https://fitmentor-7lx.pages.dev"}/auth/discord/callback`;
+    const cfEnv = getCloudflareEnv() as Record<string, string> | null;
+    const clientId = process.env.DISCORD_CLIENT_ID || cfEnv?.DISCORD_CLIENT_ID || "";
+    const clientSecret = process.env.DISCORD_CLIENT_SECRET || cfEnv?.DISCORD_CLIENT_SECRET || "";
+    const appUrl = process.env.APP_URL || cfEnv?.APP_URL || "https://fitmentor-7lx.pages.dev";
+    const redirectUri = `${appUrl.replace(/\/+$/, "")}/auth/discord/callback`;
 
     const tokenRes = await fetch("https://discord.com/api/oauth2/token", {
       method: "POST",
@@ -143,7 +175,11 @@ export const exchangeDiscordCode = createServerFn({ method: "POST" })
       }),
     });
 
-    if (!tokenRes.ok) return { ok: false, error: "token_exchange_failed" } as const;
+    if (!tokenRes.ok) {
+      const errBody = await tokenRes.text();
+      console.error("Discord token exchange failed:", tokenRes.status, errBody, "redirect_uri:", redirectUri, "client_id:", clientId, "has_secret:", !!clientSecret, "secret_len:", clientSecret?.length);
+      return { ok: false, error: `token_exchange_failed: ${errBody}` } as const;
+    }
     const tokenData = await tokenRes.json();
 
     const userRes = await fetch("https://discord.com/api/users/@me", {
@@ -164,6 +200,11 @@ export const exchangeDiscordCode = createServerFn({ method: "POST" })
     }
     if (!userExists && mode === "signin") {
       return { ok: false, error: "user_not_found" } as const;
+    }
+
+    // On signup, sync user to the database first
+    if (mode === "signup" && !userExists) {
+      await syncUser(sub, email, discordUser.username);
     }
 
     const ip = getClientIp();
@@ -190,15 +231,6 @@ export function logout() {
 }
 
 export const clearSession = createServerFn({ method: "POST" }).handler(async () => {
-  const raw = getCookie(SESSION_COOKIE);
-  if (raw) {
-    const sid = await extractSessionId(raw);
-    if (sid) {
-      const session = await getSession(sid);
-      if (session?.rememberToken) await deleteRememberToken(session.rememberToken);
-      await deleteSession(sid);
-    }
-  }
   clearSessionCookie();
   return { ok: true } as const;
 });

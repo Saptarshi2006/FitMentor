@@ -20,9 +20,13 @@ pub async fn log(
     AuthUser { user_id, .. }: AuthUser,
     Json(req): Json<CoachLogRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    // Look up user's subscription tier
+    // Look up user's subscription tier (user_id from auth is cf_access_sub TEXT,
+    // subscriptions.user_id is UUID — join through users to resolve)
     let tier: String = sqlx::query_scalar(
-        "SELECT tier FROM subscriptions WHERE user_id = $1 AND status = 'active' LIMIT 1",
+        "SELECT s.tier FROM subscriptions s
+         JOIN users u ON s.user_id = u.id
+         WHERE u.cf_access_sub = $1 AND s.status = 'active'
+         LIMIT 1",
     )
     .bind(&user_id)
     .fetch_optional(&state.pool)
@@ -50,14 +54,17 @@ pub async fn log(
                 "role": "assistant",
                 "content": &req.reply,
             }));
-            let _ = sqlx::query(
-                "UPDATE chat_sessions SET messages = $1, updated_at = NOW() WHERE id = $2::uuid AND user_id = $3",
+            if let Err(e) = sqlx::query(
+                "UPDATE chat_sessions SET messages = $1, updated_at = NOW() WHERE id = CAST($2 AS uuid) AND user_id = $3",
             )
             .bind(serde_json::Value::Array(msgs))
             .bind(sid)
             .bind(&user_id)
             .execute(&state.pool)
-            .await;
+            .await
+            {
+                tracing::warn!("coach log: failed to update chat session {sid}: {e}");
+            }
         }
     }
 
@@ -76,7 +83,7 @@ pub async fn log(
         crate::services::streams::publish_coach_log(&mut conn, &event).await;
     }
 
-    let ingest_url = std::env::var("INGEST_URL").unwrap_or_else(|_| "http://ingest:8001".into());
+    let ingest_url = std::env::var("INGEST_URL").unwrap_or_else(|_| "http://ws:8080".into());
     let content = format!("User: {}\nCoach: {}", req.user_message, req.reply);
     let container_tag = req.container_tag.clone();
     let tier2 = tier.clone();

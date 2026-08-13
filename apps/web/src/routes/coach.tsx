@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MobileShell } from "@/components/MobileShell";
 import { useProfile, calcTargets } from "@/utils/profile";
+import { useAuth } from "@/utils/oauth";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Sparkles, Send, Menu, Plus, Trash2, History, MessageSquare } from "lucide-react";
@@ -74,6 +75,7 @@ function Coach() {
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const { profile } = useProfile();
+  const authUser = useAuth();
 
   const loadSessions = useCallback(async () => {
     setSessionsLoading(true);
@@ -88,6 +90,12 @@ function Coach() {
   useEffect(() => {
     loadSessions();
   }, [loadSessions]);
+
+  useEffect(() => {
+    if (!activeId && sessions.length > 0) {
+      switchSession(sessions[0].id);
+    }
+  }, [sessions]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -160,7 +168,7 @@ function Coach() {
 
     try {
       const res = await ask({
-        data: { session_id: sid, messages: newMsgs, profile: profileWithTargets },
+        data: { session_id: sid, messages: newMsgs, profile: profileWithTargets, user_sub: authUser?.sub, user_email: authUser?.email },
       });
       setMessages([...newMsgs, { role: "assistant", content: res.reply }]);
       loadSessions();

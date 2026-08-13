@@ -16,10 +16,6 @@ import {
   Pill,
   CalendarDays,
   Users,
-  Plus,
-  Send,
-  Heart,
-  MessageCircle,
   TrendingUp,
   TrendingDown,
   Shapes,
@@ -756,183 +752,14 @@ function FormAnalyzer() {
   );
 }
 
-interface Post {
-  id: string;
-  author: string;
-  text: string;
-  likes: number;
-  replies: { author: string; text: string }[];
-  timestamp: number;
-  likedBy: string[];
-}
-
-const POSTS_KEY = "fitmentor.community.v1";
-
-function loadPosts(): Post[] {
-  try {
-    return JSON.parse(localStorage.getItem(POSTS_KEY) ?? "[]");
-  } catch {
-    return [];
-  }
-}
-
-function savePosts(posts: Post[]) {
-  localStorage.setItem(POSTS_KEY, JSON.stringify(posts));
-}
-
 function CommunityFeed() {
-  const profile = loadProfile();
-  const [posts, setPosts] = useState<Post[]>(loadPosts);
-  const [newPost, setNewPost] = useState("");
-  const [replyTo, setReplyTo] = useState<string | null>(null);
-  const [replyText, setReplyText] = useState("");
-
-  const addPost = () => {
-    if (!newPost.trim()) return;
-    const p: Post = {
-      id: Date.now().toString(),
-      author: profile?.name ?? "Anonymous",
-      text: newPost.trim(),
-      likes: 0,
-      replies: [],
-      timestamp: Date.now(),
-      likedBy: [],
-    };
-    const updated = [p, ...posts];
-    setPosts(updated);
-    savePosts(updated);
-    setNewPost("");
-    toast.success("Posted in community!");
-  };
-
-  const toggleLike = (postId: string) => {
-    const updated = posts.map((p) => {
-      if (p.id !== postId) return p;
-      const liked = p.likedBy.includes(profile?.name ?? "Anonymous");
-      return {
-        ...p,
-        likes: liked ? p.likes - 1 : p.likes + 1,
-        likedBy: liked
-          ? p.likedBy.filter((n) => n !== (profile?.name ?? "Anonymous"))
-          : [...p.likedBy, profile?.name ?? "Anonymous"],
-      };
-    });
-    setPosts(updated);
-    savePosts(updated);
-  };
-
-  const addReply = (postId: string) => {
-    if (!replyText.trim()) return;
-    const updated = posts.map((p) => {
-      if (p.id !== postId) return p;
-      return {
-        ...p,
-        replies: [...p.replies, { author: profile?.name ?? "Anonymous", text: replyText.trim() }],
-      };
-    });
-    setPosts(updated);
-    savePosts(updated);
-    setReplyText("");
-    setReplyTo(null);
-  };
-
   return (
-    <div className="space-y-5 pt-4">
-      <div className="rounded-2xl border border-border/60 bg-card p-5">
-        <h2 className="flex items-center gap-2 text-lg font-bold">
-          <Users className="h-5 w-5 text-primary" /> Community Feed
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Share your progress, ask questions, motivate others
-        </p>
-        <div className="mt-4 flex gap-2">
-          <Input
-            placeholder="Share something with the community..."
-            value={newPost}
-            onChange={(e) => setNewPost(e.target.value)}
-            className="flex-1"
-          />
-          <Button size="icon" onClick={addPost} disabled={!newPost.trim()}>
-            <Send className="h-4 w-4" />
-          </Button>
-        </div>
-        <div className="mt-5 space-y-3">
-          {posts.length === 0 && (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              No posts yet. Be the first to share!
-            </p>
-          )}
-          {posts.map((post) => (
-            <div key={post.id} className="rounded-xl border border-border/60 bg-background p-3.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/20 text-xs font-bold text-primary">
-                    {post.author[0].toUpperCase()}
-                  </div>
-                  <span className="text-sm font-semibold">{post.author}</span>
-                  <span className="text-[10px] text-muted-foreground">
-                    {new Date(post.timestamp).toLocaleDateString("en-IN", {
-                      day: "numeric",
-                      month: "short",
-                    })}
-                  </span>
-                </div>
-              </div>
-              <p className="mt-2 text-sm">{post.text}</p>
-              <div className="mt-3 flex items-center gap-3">
-                <button
-                  onClick={() => toggleLike(post.id)}
-                  className={cn(
-                    "flex items-center gap-1 text-xs transition-colors",
-                    post.likedBy.includes(profile?.name ?? "Anonymous")
-                      ? "text-primary"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  <Heart
-                    className={cn(
-                      "h-3.5 w-3.5",
-                      post.likedBy.includes(profile?.name ?? "Anonymous") && "fill-primary",
-                    )}
-                  />
-                  {post.likes}
-                </button>
-                <button
-                  onClick={() => setReplyTo(replyTo === post.id ? null : post.id)}
-                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                >
-                  <MessageCircle className="h-3.5 w-3.5" />
-                  {post.replies.length}
-                </button>
-              </div>
-              {post.replies.length > 0 && (
-                <div className="mt-2 space-y-1.5 border-t border-border/30 pt-2">
-                  {post.replies.map((r, i) => (
-                    <div key={i} className="flex items-start gap-2 text-xs">
-                      <span className="mt-0.5 font-semibold">{r.author}:</span>
-                      <span className="text-muted-foreground">{r.text}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {replyTo === post.id && (
-                <div className="mt-2 flex gap-2">
-                  <Input
-                    placeholder="Write a reply..."
-                    value={replyText}
-                    onChange={(e) => setReplyText(e.target.value)}
-                    className="flex-1 text-xs"
-                    onKeyDown={(e) => e.key === "Enter" && addReply(post.id)}
-                  />
-                  <Button size="sm" onClick={() => addReply(post.id)} disabled={!replyText.trim()}>
-                    Reply
-                  </Button>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
+    <div className="flex flex-col items-center justify-center py-24 text-center">
+      <Users className="mb-4 h-16 w-16 text-muted-foreground" />
+      <h2 className="text-xl font-semibold">Community</h2>
+      <p className="mt-2 max-w-xs text-sm text-muted-foreground">
+        The community feature is coming soon. Stay tuned!
+      </p>
     </div>
   );
 }

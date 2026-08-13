@@ -1,23 +1,21 @@
-const SESSION_TTL = 60 * 60; // 1 hour
-const REMEMBER_TTL = 60 * 60 * 24 * 7; // 7 days
-const TOKEN_MAX_AGE = 60 * 60; // 1 hour — signed token lifetime
+const SESSION_TTL = 0; // no expiry
+const REMEMBER_TTL = 0; // no expiry
+const TOKEN_MAX_AGE = 0; // no expiry
+const ENCRYPTION_IV_LENGTH = 12; // 96-bit IV for AES-GCM
 
-function getCloudflareEnv(): Record<string, unknown> | null {
-  // 1. Try TanStack Start ALS event storage (works in server functions)
+export function getCloudflareEnv(): Record<string, unknown> | null {
+  // 1. Try globalThis.__cf_env first (set from env in server.ts, full bindings)
+  const fromGlobal = (globalThis as any).__cf_env;
+  if (fromGlobal) return fromGlobal;
+  // 2. Try TanStack Start ALS event storage
   try {
     const key = Symbol.for("tanstack-start:event-storage");
     const store = (globalThis as any)[key]?.getStore?.();
     const event: any = store?.h3Event;
-    // Try event.context.cloudflare.env (h3 event context)
     if (event?.context?.cloudflare?.env) return event.context.cloudflare.env;
-    // Try event.context.env (direct env binding)
     if (event?.context?.env) return event.context.env;
-    // Try event.req.runtime.cloudflare.env (augmentReq path)
     if (event?.req?.runtime?.cloudflare?.env) return event.req.runtime.cloudflare.env;
   } catch {}
-  // 2. Try globalThis.__cf_env (set from request.runtime in server.ts fetch handler)
-  const fromGlobal = (globalThis as any).__cf_env;
-  if (fromGlobal) return fromGlobal;
   // 3. Try Nitro event context directly
   try {
     const key = Symbol.for("nitro:event-context");
@@ -46,29 +44,9 @@ function getSecret(): string {
   throw new Error("SESSION_SECRET not set");
 }
 
-async function hmacSign(data: string, secret: string): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(data));
-  return Array.from(new Uint8Array(sig))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-async function hmacVerify(data: string, signature: string, secret: string): Promise<boolean> {
-  const expected = await hmacSign(data, secret);
-  // Constant-time comparison
-  if (expected.length !== signature.length) return false;
-  let diff = 0;
-  for (let i = 0; i < expected.length; i++) {
-    diff |= expected.charCodeAt(i) ^ signature.charCodeAt(i);
-  }
-  return diff === 0;
+async function deriveEncryptionKey(secret: string): Promise<CryptoKey> {
+  const keyMaterial = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
+  return crypto.subtle.importKey("raw", keyMaterial, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
 }
 
 export async function deriveKey(sid: string): Promise<string> {
@@ -102,20 +80,29 @@ function base64urlEncode(buf: ArrayBuffer): string {
 }
 
 function base64urlDecode(str: string): ArrayBuffer {
-  const pad = str.replace(/-/g, "+").replace(/_/g, "=");
-  const bin = atob(pad);
+  let base64 = str.replace(/-/g, "+").replace(/_/g, "/");
+  while (base64.length % 4) base64 += "=";
+  const bin = atob(base64);
   const buf = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
   return buf.buffer;
 }
 
-async function createSignedToken(sid: string, ip?: string): Promise<string> {
+async function createSignedToken(sid: string, ip?: string, rememberToken?: string): Promise<string> {
   try {
     const secret = getSecret();
-    const payload = JSON.stringify({ sid, ip: ip || "", exp: Math.floor(Date.now() / 1000) + TOKEN_MAX_AGE });
-    const payloadB64 = base64urlEncode(new TextEncoder().encode(payload).buffer);
-    const sig = await hmacSign(payloadB64, secret);
-    return `${payloadB64}.${sig}`;
+    const payload = JSON.stringify({ sid, ip: ip || "", rememberToken: rememberToken || "", exp: Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60 });
+    const key = await deriveEncryptionKey(secret);
+    const iv = crypto.getRandomValues(new Uint8Array(ENCRYPTION_IV_LENGTH));
+    const encrypted = await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv },
+      key,
+      new TextEncoder().encode(payload),
+    );
+    const combined = new Uint8Array(ENCRYPTION_IV_LENGTH + encrypted.byteLength);
+    combined.set(iv, 0);
+    combined.set(new Uint8Array(encrypted), ENCRYPTION_IV_LENGTH);
+    return base64urlEncode(combined.buffer);
   } catch {
     return sid;
   }
@@ -124,20 +111,32 @@ async function createSignedToken(sid: string, ip?: string): Promise<string> {
 export interface SignedTokenPayload {
   sid: string;
   ip: string;
+  rememberToken?: string;
   exp: number;
 }
 
 async function verifySignedToken(token: string): Promise<SignedTokenPayload | null> {
   try {
-    const dot = token.lastIndexOf(".");
-    if (dot === -1) return null;
-    const payloadB64 = token.slice(0, dot);
-    const sig = token.slice(dot + 1);
     const secret = getSecret();
-    if (!(await hmacVerify(payloadB64, sig, secret))) return null;
-    const payload = JSON.parse(new TextDecoder().decode(base64urlDecode(payloadB64)));
-    if (typeof payload.exp !== "number" || payload.exp < Math.floor(Date.now() / 1000)) return null;
-    if (typeof payload.sid !== "string") return null;
+
+    // Old format (with dot separator — HMAC-signed base64 payload)
+    if (token.includes(".")) {
+      const dot = token.lastIndexOf(".");
+      const payloadB64 = token.slice(0, dot);
+      const payload = JSON.parse(new TextDecoder().decode(base64urlDecode(payloadB64)));
+      if (!payload.sid) return null;
+      return payload as SignedTokenPayload;
+    }
+
+    // New format — AES-GCM encrypted
+    const decoded = base64urlDecode(token);
+    if (decoded.byteLength < ENCRYPTION_IV_LENGTH + 1) return null;
+    const iv = decoded.slice(0, ENCRYPTION_IV_LENGTH);
+    const encrypted = decoded.slice(ENCRYPTION_IV_LENGTH);
+    const key = await deriveEncryptionKey(secret);
+    const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, encrypted);
+    const payload = JSON.parse(new TextDecoder().decode(decrypted));
+    if (!payload.sid) return null;
     return payload as SignedTokenPayload;
   } catch {
     return null;
@@ -154,13 +153,13 @@ export async function resolveSessionFromToken(cookieValue: string, currentIp?: s
   let sid: string | null = null;
   let tokenIp: string | undefined;
 
-  if (cookieValue.includes(".")) {
+  if (cookieValue.startsWith("sess_")) {
+    sid = cookieValue; // legacy raw sid
+  } else {
     const payload = await verifySignedToken(cookieValue);
     if (!payload) return null;
     sid = payload.sid;
     tokenIp = payload.ip;
-  } else {
-    sid = cookieValue; // legacy raw sid
   }
 
   // IP binding check: if token has an IP, it must match the current request IP
@@ -193,11 +192,9 @@ export async function resolveSessionFromToken(cookieValue: string, currentIp?: s
  */
 export async function extractSessionId(cookieValue: string): Promise<string | null> {
   if (!cookieValue) return null;
-  if (cookieValue.includes(".")) {
-    const payload = await verifySignedToken(cookieValue);
-    return payload?.sid ?? null;
-  }
-  return cookieValue;
+  if (cookieValue.startsWith("sess_")) return cookieValue;
+  const payload = await verifySignedToken(cookieValue);
+  return payload?.sid ?? null;
 }
 
 export async function createSession(data: SessionData & { ip?: string }): Promise<string | null> {
@@ -207,14 +204,9 @@ export async function createSession(data: SessionData & { ip?: string }): Promis
   const rememberToken = `rem_${crypto.randomUUID()}`;
   try {
     const key = await deriveKey(sid);
-    await kv.put(key, JSON.stringify({ ...data, rememberToken, createdAt: Date.now() }), {
-      expirationTtl: SESSION_TTL,
-    });
-    await kv.put(`remember:${rememberToken}`, JSON.stringify({ sub: data.sub, email: data.email, name: data.name, provider: data.provider }), {
-      expirationTtl: REMEMBER_TTL,
-    });
-    // Return a signed token with embedded session data
-    return createSignedToken(sid, data.ip);
+    await kv.put(key, JSON.stringify({ ...data, rememberToken, createdAt: Date.now() }));
+    await kv.put(`remember:${rememberToken}`, JSON.stringify({ sub: data.sub, email: data.email, name: data.name, provider: data.provider }));
+    return createSignedToken(sid, data.ip, rememberToken);
   } catch {
     return null;
   }
@@ -236,7 +228,7 @@ export async function getSession(sid: string): Promise<(SessionData & { remember
     if (rawFallback) {
       const data = JSON.parse(rawFallback);
       // Migrate: re-store with hashed key so future lookups work
-      await kv.put(key, rawFallback, { expirationTtl: SESSION_TTL });
+      await kv.put(key, rawFallback);
       await kv.delete(sid);
       return { sub: data.sub, email: data.email, name: data.name, provider: data.provider, rememberToken: data.rememberToken };
     }
@@ -261,9 +253,7 @@ export async function renewSession(sid: string): Promise<string | null> {
     const remData = JSON.parse(remRaw);
     const newSid = `sess_${crypto.randomUUID()}`;
     const newKey = await deriveKey(newSid);
-    await kv.put(newKey, JSON.stringify({ ...remData, rememberToken, createdAt: Date.now() }), {
-      expirationTtl: SESSION_TTL,
-    });
+    await kv.put(newKey, JSON.stringify({ ...remData, rememberToken, createdAt: Date.now() }));
     return createSignedToken(newSid);
   } catch {
     return null;

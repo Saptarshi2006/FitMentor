@@ -43,7 +43,7 @@ impl JwtValidator {
         Self {
             team_domain,
             aud,
-            hmac_secret: std::env::var("JWT_SECRET").unwrap_or_else(|_| "fitmentor-dev-secret-change-in-production".to_string()),
+            hmac_secret: std::env::var("JWT_SECRET").unwrap_or_default(),
             cache: RwLock::new(None),
             client: reqwest::Client::new(),
         }

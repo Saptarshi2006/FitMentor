@@ -1,0 +1,79 @@
+# =============================================================================
+# FitMentor — Production Docker Compose
+# =============================================================================
+# Copy this file to docker-compose.prod.yml and fill in the real values.
+# docker-compose.prod.yml is gitignored and must never be committed.
+#
+# Usage:
+#   1. cp docker-compose.prod.yml.example docker-compose.prod.yml
+#   2. Fill in all ${VAR} values in the .env file
+#   3. docker compose -f docker-compose.prod.yml up -d --build
+# =============================================================================
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      RUST_LOG: ${RUST_LOG:-info}
+      INGEST_URL: http://ws:8080
+      PORT: ${PORT:-3000}
+      APP_URL: ${APP_URL:?Set APP_URL in .env}
+      API_URL: ${API_URL:?Set API_URL in .env}
+      CF_ACCOUNT_ID: ${CF_ACCOUNT_ID:-}
+      CF_API_TOKEN: ${CF_API_TOKEN:-}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      API_SHARED_SECRET: ${API_SHARED_SECRET:?Set API_SHARED_SECRET in .env}
+      SUPERMEMORY_API_KEY: ${SUPERMEMORY_API_KEY:-}
+      POLAR_ACCESS_TOKEN: ${POLAR_ACCESS_TOKEN:-}
+      POLAR_WEBHOOK_SECRET: ${POLAR_WEBHOOK_SECRET:-}
+      POLAR_PREMIUM_PRODUCT_ID: ${POLAR_PREMIUM_PRODUCT_ID:-}
+      POLAR_PREMIUM_PRICE_ID: ${POLAR_PREMIUM_PRICE_ID:-}
+      POLAR_PRO_PRODUCT_ID: ${POLAR_PRO_PRODUCT_ID:-}
+      POLAR_PRO_PRICE_ID: ${POLAR_PRO_PRICE_ID:-}
+    restart: unless-stopped
+    depends_on:
+      - redis
+
+  ws:
+    build:
+      context: apps/ws
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      REDIS_URL: redis://redis:6379
+      SUPERMEMORY_API_KEY: ${SUPERMEMORY_API_KEY:-}
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+      R2_BUCKET: ${R2_BUCKET:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_REGION: ${R2_REGION:-auto}
+      R2_HOST: ${R2_HOST:-}
+      API_SHARED_SECRET: ${API_SHARED_SECRET:?Set API_SHARED_SECRET in .env}
+    restart: unless-stopped
+
+  planner:
+    build:
+      context: .
+      dockerfile: microservices/daily-planner/Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+      AI_WORKER_URL: ${AI_WORKER_URL:-https://your-domain.pages.dev/api/ai/complete}
+      API_SHARED_SECRET: ${API_SHARED_SECRET:?Set API_SHARED_SECRET in .env}
+      PORT: "8002"
+      MODE: "http"
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped

@@ -14,7 +14,7 @@ import redis as redis_lib
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-CF_MODEL = "@cf/meta/llama-4-scout-17b-16e-instruct"
+AI_MODEL = "@cf/meta/llama-4-scout-17b-16e-instruct"
 
 # Total AI token pool shared across all users
 TOTAL_AI_POOL = 10_000
@@ -95,47 +95,32 @@ def check_quota(cf_sub: str) -> bool:
     r.expire(f"quota:planner:user:{cf_sub}:{today}", 86400)
     return True
 
-def call_cf_ai(system: str, prompt: str, max_tokens: int = 2048) -> str:
-    account_id = os.environ.get("CF_ACCOUNT_ID", "")
-    api_token = os.environ.get("CF_API_TOKEN", "")
-    if not account_id or not api_token:
-        logger.warning("CF_ACCOUNT_ID or CF_API_TOKEN not set, using local fallback")
+def call_ai_worker(system: str, prompt: str, max_tokens: int = 2048) -> str:
+    worker_url = os.environ.get("AI_WORKER_URL", "")
+    shared_secret = os.environ.get("API_SHARED_SECRET", "")
+    if not worker_url or not shared_secret:
+        logger.warning("AI_WORKER_URL or API_SHARED_SECRET not set")
         return ""
 
-    cf_api = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{CF_MODEL}"
     try:
         with httpx.Client(timeout=120) as client:
             resp = client.post(
-                cf_api,
-                headers={"Authorization": f"Bearer {api_token}"},
+                worker_url,
+                headers={
+                    "x-api-key": shared_secret,
+                    "Content-Type": "application/json",
+                },
                 json={
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": prompt},
-                    ],
+                    "system": system,
+                    "prompt": prompt,
                     "max_tokens": max_tokens,
                 },
             )
             resp.raise_for_status()
             data = resp.json()
-            raw = (
-                data.get("result", {})
-                .get("choices", [{}])[0]
-                .get("message", {})
-                .get("content")
-                or ""
-            )
-            if not raw:
-                response_val = data.get("result", {}).get("response")
-                if isinstance(response_val, str):
-                    raw = response_val
-                elif isinstance(response_val, (list, dict)):
-                    raw = json.dumps(response_val, ensure_ascii=False)
-                else:
-                    raw = ""
-            return raw.replace("```json", "").replace("```", "").strip()
+            return data.get("result", "")
     except Exception as e:
-        logger.error("CF AI call failed: %s", e)
+        logger.error("AI Worker call failed: %s", e)
         return ""
 
 
@@ -153,14 +138,17 @@ def _parse_health(profile: dict) -> str:
 
 def _ai_retry(system: str, prompt: str, max_tokens: int = 2048, retries: int = 3) -> list | dict:
     for attempt in range(retries):
-        raw = call_cf_ai(system, prompt, max_tokens)
-        if not raw:
-            break
-        try:
-            return json.loads(raw)
-        except json.JSONDecodeError as e:
+        raw = call_ai_worker(system, prompt, max_tokens)
+        if raw:
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError as e:
+                if attempt < retries - 1:
+                    logger.warning("AI JSON parse error (attempt %d): %s — retrying", attempt + 1, e)
+                    continue
+        else:
             if attempt < retries - 1:
-                logger.warning("AI JSON parse error (attempt %d): %s — retrying", attempt + 1, e)
+                logger.warning("AI returned empty (attempt %d) — retrying", attempt + 1)
                 continue
     return []
 

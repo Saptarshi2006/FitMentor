@@ -3,7 +3,7 @@ import { getCookie } from "@tanstack/react-start/server";
 import { resolveSessionFromToken } from "@/utils/session";
 
 const SESSION_COOKIE = "fitmentor_session";
-const API_URL = process.env.API_URL || "https://16-112-132-239.sslip.io";
+const API_URL = process.env.API_URL || "";
 
 function authHeaders(sub: string, email?: string): Record<string, string> {
   const apiKey = process.env.API_SHARED_SECRET;
@@ -67,7 +67,9 @@ export const proxyCheckout = createServerFn({ method: "POST" })
       headers: authHeaders(session.sub),
       body: JSON.stringify({ tier }),
     });
-    return await res.json();
+    const body = await res.json();
+    if (!res.ok) return { error: "payment_service_error" };
+    return body;
   });
 
 export const proxyMealPlan = createServerFn({ method: "GET" }).handler(async () => {

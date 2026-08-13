@@ -4,8 +4,6 @@ import { z } from "zod";
 import { chatCompletion, type ChatMessage } from "./ai-gateway.server";
 import { resolveSessionFromToken } from "@/utils/session";
 
-const SESSION_COOKIE = "fitmentor_session";
-
 const Input = z.object({
   session_id: z.string().optional(),
   messages: z
@@ -35,7 +33,11 @@ const Input = z.object({
       protein: z.number().optional(),
     })
     .optional(),
+  user_sub: z.string().optional(),
+  user_email: z.string().optional(),
 });
+
+const apiUrl = process.env.API_URL || "";
 
 export const askCoach = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => Input.parse(d))
@@ -68,27 +70,28 @@ Rules:
 
 ${profileBlock}`;
 
-    const cookie = getCookie(SESSION_COOKIE);
-    const ip = (() => {
+    // Resolve session server-side (cookie-based) as primary source.
+    // Frontend useAuth() may be null on first render due to useEffect race.
+    let sub = data.user_sub || null;
+    let email = data.user_email || null;
+    if (!sub) {
       try {
-        const key = Symbol.for("tanstack-start:event-storage");
-        const store = (globalThis as any)[key]?.getStore?.();
-        const headers = store?.h3Event?.req?.headers;
-        return headers?.["cf-connecting-ip"] || headers?.["x-forwarded-for"]?.split(",")[0]?.trim() || "";
-      } catch { return ""; }
-    })();
-    const session = cookie ? await resolveSessionFromToken(cookie, ip) : null;
-
-    // Look up user's subscription tier from backend
+        const raw = getCookie("fitmentor_session");
+        if (raw) {
+          const sess = await resolveSessionFromToken(raw);
+          if (sess) { sub = sess.sub; email = sess.email; }
+        }
+      } catch {}
+    }
     let tier = "free";
-    if (session?.sub) {
+
+    if (sub) {
       try {
-        const apiUrl = process.env.API_URL || "https://16-112-132-239.sslip.io";
         const apiKey = process.env.API_SHARED_SECRET;
         const subRes = await fetch(`${apiUrl}/v1/user/subscription`, {
           headers: {
             "X-Api-Key": apiKey ?? "",
-            "X-User-Id": session.sub,
+            "X-User-Id": sub,
           },
         });
         if (subRes.ok) {
@@ -100,10 +103,9 @@ ${profileBlock}`;
     }
 
     const messages: ChatMessage[] = [{ role: "system", content: system }, ...data.messages];
-    const reply = await chatCompletion({ messages, userId: session?.sub, tier });
+    const reply = await chatCompletion({ messages, userId: sub, tier });
 
-    if (session?.sub) {
-      const apiUrl = process.env.API_URL || "https://16-112-132-239.sslip.io";
+    if (sub) {
       const apiKey = process.env.API_SHARED_SECRET;
       const lastUserMsg = [...data.messages].reverse().find((m) => m.role === "user");
       try {
@@ -112,14 +114,14 @@ ${profileBlock}`;
           headers: {
             "Content-Type": "application/json",
             "X-Api-Key": apiKey ?? "",
-            "X-User-Id": session.sub,
-            "X-User-Email": session.email,
+            "X-User-Id": sub,
+            "X-User-Email": email ?? "",
           },
           body: JSON.stringify({
             messages: data.messages,
             user_message: lastUserMsg?.content ?? "",
             reply,
-            container_tag: session.sub,
+            container_tag: sub,
             session_id: data.session_id || null,
           }),
         });

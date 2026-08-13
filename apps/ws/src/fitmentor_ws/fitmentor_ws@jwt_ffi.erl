@@ -2,15 +2,15 @@
 -include_lib("public_key/include/public_key.hrl").
 -export([urlsafe_b64_decode/1, rsa_verify/4, http_get/1, http_post/3, get_env/1, system_time_seconds/0, throttle_init/0, throttle_check/3, current_minute_bucket/0]).
 
-%% Read an OS environment variable, returns empty string if unset.
+get_env(Key) when is_binary(Key) ->
+  get_env(binary_to_list(Key));
 get_env(Key) ->
   case os:getenv(Key) of
-    false -> "";
-    V -> V
+    false -> <<>>;
+    V when is_list(V) -> list_to_binary(V);
+    V when is_binary(V) -> V
   end.
 
-%% Decode base64url without padding (JWT segments often omit '=').
-%% Returns the raw binary, or <<>> if decoding fails.
 urlsafe_b64_decode(Bin) when is_binary(Bin) ->
   Padding = case byte_size(Bin) rem 4 of
     2 -> <<Bin/binary, "==">>;
@@ -28,8 +28,6 @@ urlsafe_b64_decode(Bin) when is_binary(Bin) ->
     _:_ -> <<>>
   end.
 
-%% RS256 verification: Message (signed bytes), Signature (raw bytes),
-%% N and E as base64url-encoded RSA modulus/exponent (JWK fields).
 rsa_verify(Message, Signature, N, E) ->
   try
     Mod = binary:decode_unsigned(urlsafe_b64_decode(N)),
@@ -40,11 +38,11 @@ rsa_verify(Message, Signature, N, E) ->
     _:_ -> false
   end.
 
-%% Current unix time in seconds.
 system_time_seconds() ->
   erlang:system_time(second).
 
-%% Minimal blocking HTTP GET via httpc (inets must be started).
+http_get(Url) when is_binary(Url) ->
+  http_get(binary_to_list(Url));
 http_get(Url) ->
   inets:start(),
   ssl:start(),
@@ -54,12 +52,15 @@ http_get(Url) ->
     {error, Reason} -> {error, Reason}
   end.
 
-%% Blocking HTTP POST. Headers is a list of 2-tuples [{Key, Value}].
-%% Returns {ok, {StatusCode, Body}} | {error, Reason}.
+http_post(Url, Body, Headers) when is_binary(Url) ->
+  http_post(binary_to_list(Url), Body, Headers);
+http_post(Url, Body, Headers) when is_binary(Body) ->
+  http_post(Url, binary_to_list(Body), Headers);
 http_post(Url, Body, Headers) ->
   inets:start(),
   ssl:start(),
-  AllHeaders = [{"content-type", "application/json"} | Headers],
+  AllHeaders = [{"content-type", "application/json"} |
+                [{ensure_list(K), ensure_list(V)} || {K, V} <- Headers]],
   case httpc:request(post, {Url, AllHeaders, "application/json", Body},
                      [{timeout, 60000}], [{body_format, binary}]) of
     {ok, {{_, Status, _}, _RespHeaders, RespBody}} ->
@@ -68,7 +69,10 @@ http_post(Url, Body, Headers) ->
       {error, Reason}
   end.
 
-%% ETS throttle table — in-memory rate limiting per user per minute
+ensure_list(V) when is_binary(V) -> binary_to_list(V);
+ensure_list(V) when is_list(V) -> V;
+ensure_list(V) -> V.
+
 throttle_init() ->
   try
     case ets:info(fitmentor_throttle) of
@@ -79,12 +83,9 @@ throttle_init() ->
     _:_ -> ok
   end.
 
-%% Current unix time in minutes (throttle bucket key).
 current_minute_bucket() ->
   erlang:system_time(second) div 60.
 
-%% Check throttle: returns 1 if under limit, 0 if exceeded.
-%% Limit = max requests per minute for this user's tier.
 throttle_check(UserId, MinuteBucket, Limit) ->
   Key = {UserId, MinuteBucket},
   case ets:lookup(fitmentor_throttle, Key) of

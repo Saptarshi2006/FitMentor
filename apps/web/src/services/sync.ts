@@ -1,18 +1,20 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getCookie } from "@tanstack/react-start/server";
 import type { Profile } from "@fitmentor/shared";
-import { getSession, extractSessionId } from "@/utils/session";
+import { resolveSessionFromToken } from "@/utils/session";
 
 const SESSION_COOKIE = "fitmentor_session";
 
-export const fetchProfile = createServerFn({ method: "GET" }).handler(async () => {
+async function resolveSession() {
   const raw = getCookie(SESSION_COOKIE);
   if (!raw) return null;
-  const sid = await extractSessionId(raw);
-  if (!sid) return null;
-  const session = await getSession(sid);
+  return resolveSessionFromToken(raw);
+}
+
+export const fetchProfile = createServerFn({ method: "GET" }).handler(async () => {
+  const session = await resolveSession();
   if (!session) return null;
-  const apiUrl = process.env.API_URL || "https://16-112-132-239.sslip.io";
+  const apiUrl = process.env.API_URL || "";
   const apiKey = process.env.API_SHARED_SECRET;
   if (!apiKey) return null;
   const res = await fetch(`${apiUrl}/v1/user/me`, {
@@ -28,26 +30,16 @@ export const fetchProfile = createServerFn({ method: "GET" }).handler(async () =
   const profile = data?.profile as Record<string, unknown> | undefined;
   if (!profile?.name) return null;
 
-  // If profile is fresh from DB default insert (created_at === updated_at), user hasn't onboarded yet
-  if (profile.createdAt && profile.updatedAt) {
-    const diff = Math.abs(new Date(profile.updatedAt as string).getTime() - new Date(profile.createdAt as string).getTime());
-    if (diff < 1000) return null;
-  }
-
   return profile as unknown as Profile;
 });
 
 export const syncProfile = createServerFn({ method: "POST" })
   .validator((d: unknown) => d as Profile)
   .handler(async ({ data: profile }) => {
-    const raw = getCookie(SESSION_COOKIE);
-    if (!raw) return { ok: false, error: "no_session" } as const;
-    const sid = await extractSessionId(raw);
-    if (!sid) return { ok: false, error: "no_session" } as const;
-    const session = await getSession(sid);
-    if (!session) return { ok: false, error: "invalid_session" } as const;
+    const session = await resolveSession();
+    if (!session) return { ok: false, error: "no_session" } as const;
 
-    const apiUrl = process.env.API_URL || "https://16-112-132-239.sslip.io";
+    const apiUrl = process.env.API_URL || "";
     const apiKey = process.env.API_SHARED_SECRET;
     if (!apiKey) return { ok: false, error: "api_key_not_configured" } as const;
 
@@ -92,13 +84,9 @@ export const syncProfile = createServerFn({ method: "POST" })
 export const syncWorkoutDone = createServerFn({ method: "POST" })
   .validator((d: unknown) => d as { workoutDone: boolean })
   .handler(async ({ data: { workoutDone } }) => {
-    const raw = getCookie(SESSION_COOKIE);
-    if (!raw) return { ok: false };
-    const sid = await extractSessionId(raw);
-    if (!sid) return { ok: false };
-    const session = await getSession(sid);
+    const session = await resolveSession();
     if (!session) return { ok: false };
-    const apiUrl = process.env.API_URL || "https://16-112-132-239.sslip.io";
+    const apiUrl = process.env.API_URL || "";
     const apiKey = process.env.API_SHARED_SECRET;
     if (!apiKey) return { ok: false };
     const res = await fetch(`${apiUrl}/v1/logs/today`, {
@@ -115,21 +103,17 @@ export const syncWorkoutDone = createServerFn({ method: "POST" })
   });
 
 export const fetchSubscription = createServerFn({ method: "POST" }).handler(async () => {
-  const raw = getCookie(SESSION_COOKIE);
-  if (!raw) return { data: { subscription: null } };
-  const sid = await extractSessionId(raw);
-  if (!sid) return { data: { subscription: null } };
-  const session = await getSession(sid);
-  if (!session) return { data: { subscription: null } };
-  const apiKey = process.env.API_SHARED_SECRET;
-  if (!apiKey) return { data: { subscription: null } };
-  const res = await fetch(`${process.env.API_URL || "https://16-112-132-239.sslip.io"}/v1/user/subscription`, {
-    method: "GET",
-    headers: {
-      "X-Api-Key": apiKey,
-      "X-User-Id": session.sub,
-    },
+    const session = await resolveSession();
+    if (!session) return { data: { subscription: null } };
+    const apiKey = process.env.API_SHARED_SECRET;
+    if (!apiKey) return { data: { subscription: null } };
+    const res = await fetch(`${process.env.API_URL || ""}/v1/user/subscription`, {
+      method: "GET",
+      headers: {
+        "X-Api-Key": apiKey,
+        "X-User-Id": session.sub,
+      },
+    });
+    if (!res.ok) return { data: { subscription: null } };
+    return res.json();
   });
-  if (!res.ok) return { data: { subscription: null } };
-  return res.json();
-});
