@@ -1,10 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getCookie } from "@tanstack/react-start/server";
 import { resolveSessionFromToken } from "@/utils/session";
+import { getEnv } from "@/utils/env";
 
 const SESSION_COOKIE = "fitmentor_session";
-const WS_URL = process.env.WS_URL || "https://fitmentor-ws.fly.dev";
-const API_SHARED_SECRET = process.env.API_SHARED_SECRET || "";
+const wsUrl = () => getEnv("WS_URL") || "https://40-192-40-60.sslip.io";
 
 function getClientIp(): string {
   try {
@@ -40,11 +40,11 @@ export const proxyCommunityGraphQL = createServerFn({ method: "POST" })
     const session = await resolveSession();
     if (!session) return { errors: [{ message: "Unauthorized" }] };
 
-    const res = await fetch(`${WS_URL}/v1/community/graphql`, {
+    const res = await fetch(`${wsUrl()}/v1/community/graphql`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Api-Key": API_SHARED_SECRET,
+        "X-Api-Key": getEnv("API_SHARED_SECRET"),
         "X-User-Id": session.sub,
       },
       body: JSON.stringify(data),

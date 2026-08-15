@@ -50,7 +50,7 @@ pub async fn checkout(
         .bearer_auth(&state.polar_access_token)
         .json(&serde_json::json!({
             "products": [product_id],
-            "success_url": "https://fitmentor-7lx.pages.dev/profile?checkout=success",
+            "success_url": "https://fitmentor-ey9.pages.dev/profile?checkout=success",
             "metadata": {
                 "user_id": user_id,
                 "tier": req.tier,

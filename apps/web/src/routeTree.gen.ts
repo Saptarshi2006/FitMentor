@@ -21,7 +21,7 @@ import { Route as SignupRouteImport } from './routes/signup'
 import { Route as ToolsRouteImport } from './routes/tools'
 import { Route as WorkoutsRouteImport } from './routes/workouts'
 import { Route as ExerciseNameRouteImport } from './routes/exercise.$name'
-import { Route as AuthDiscordCallbackRouteImport } from './routes/auth.discord.callback'
+import { Route as AuthGoogleCallbackRouteImport } from './routes/auth.google.callback'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -83,9 +83,9 @@ const ExerciseNameRoute = ExerciseNameRouteImport.update({
   path: '/exercise/$name',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthDiscordCallbackRoute = AuthDiscordCallbackRouteImport.update({
-  id: '/auth/discord/callback',
-  path: '/auth/discord/callback',
+const AuthGoogleCallbackRoute = AuthGoogleCallbackRouteImport.update({
+  id: '/auth/google/callback',
+  path: '/auth/google/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -102,7 +102,7 @@ export interface FileRoutesByFullPath {
   '/tools': typeof ToolsRoute
   '/workouts': typeof WorkoutsRoute
   '/exercise/$name': typeof ExerciseNameRoute
-  '/auth/discord/callback': typeof AuthDiscordCallbackRoute
+  '/auth/google/callback': typeof AuthGoogleCallbackRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -117,7 +117,7 @@ export interface FileRoutesByTo {
   '/tools': typeof ToolsRoute
   '/workouts': typeof WorkoutsRoute
   '/exercise/$name': typeof ExerciseNameRoute
-  '/auth/discord/callback': typeof AuthDiscordCallbackRoute
+  '/auth/google/callback': typeof AuthGoogleCallbackRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -133,7 +133,7 @@ export interface FileRoutesById {
   '/tools': typeof ToolsRoute
   '/workouts': typeof WorkoutsRoute
   '/exercise/$name': typeof ExerciseNameRoute
-  '/auth/discord/callback': typeof AuthDiscordCallbackRoute
+  '/auth/google/callback': typeof AuthGoogleCallbackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -150,7 +150,7 @@ export interface FileRouteTypes {
     | '/tools'
     | '/workouts'
     | '/exercise/$name'
-    | '/auth/discord/callback'
+    | '/auth/google/callback'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -165,7 +165,7 @@ export interface FileRouteTypes {
     | '/tools'
     | '/workouts'
     | '/exercise/$name'
-    | '/auth/discord/callback'
+    | '/auth/google/callback'
   id:
     | '__root__'
     | '/'
@@ -180,7 +180,7 @@ export interface FileRouteTypes {
     | '/tools'
     | '/workouts'
     | '/exercise/$name'
-    | '/auth/discord/callback'
+    | '/auth/google/callback'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -196,7 +196,7 @@ export interface RootRouteChildren {
   ToolsRoute: typeof ToolsRoute
   WorkoutsRoute: typeof WorkoutsRoute
   ExerciseNameRoute: typeof ExerciseNameRoute
-  AuthDiscordCallbackRoute: typeof AuthDiscordCallbackRoute
+  AuthGoogleCallbackRoute: typeof AuthGoogleCallbackRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -285,11 +285,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ExerciseNameRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/auth/discord/callback': {
-      id: '/auth/discord/callback'
-      path: '/auth/discord/callback'
-      fullPath: '/auth/discord/callback'
-      preLoaderRoute: typeof AuthDiscordCallbackRouteImport
+    '/auth/google/callback': {
+      id: '/auth/google/callback'
+      path: '/auth/google/callback'
+      fullPath: '/auth/google/callback'
+      preLoaderRoute: typeof AuthGoogleCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -308,7 +308,7 @@ const rootRouteChildren: RootRouteChildren = {
   ToolsRoute: ToolsRoute,
   WorkoutsRoute: WorkoutsRoute,
   ExerciseNameRoute: ExerciseNameRoute,
-  AuthDiscordCallbackRoute: AuthDiscordCallbackRoute,
+  AuthGoogleCallbackRoute: AuthGoogleCallbackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

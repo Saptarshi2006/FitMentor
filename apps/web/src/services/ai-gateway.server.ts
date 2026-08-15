@@ -3,6 +3,8 @@ export type ChatMessage = {
   content: string;
 };
 
+import { getEnv } from "@/utils/env";
+
 function getCloudflareEnv(): Record<string, unknown> | null {
   try {
     const key = Symbol.for("tanstack-start:event-storage");
@@ -37,8 +39,8 @@ export async function chatCompletion(opts: {
   tier?: string;
 }): Promise<string> {
   if (opts.userId) {
-    const apiUrl = process.env.API_URL || "";
-    const apiKey = process.env.API_SHARED_SECRET;
+    const apiUrl = getEnv("API_URL");
+    const apiKey = getEnv("API_SHARED_SECRET");
     const res = await fetch(`${apiUrl}/v1/internal/quota/check-and-consume`, {
       method: "POST",
       headers: {

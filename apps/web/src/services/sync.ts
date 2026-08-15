@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { getCookie } from "@tanstack/react-start/server";
 import type { Profile } from "@fitmentor/shared";
 import { resolveSessionFromToken } from "@/utils/session";
+import { getEnv } from "@/utils/env";
 
 const SESSION_COOKIE = "fitmentor_session";
 
@@ -14,8 +15,8 @@ async function resolveSession() {
 export const fetchProfile = createServerFn({ method: "GET" }).handler(async () => {
   const session = await resolveSession();
   if (!session) return null;
-  const apiUrl = process.env.API_URL || "";
-  const apiKey = process.env.API_SHARED_SECRET;
+  const apiUrl = getEnv("API_URL");
+  const apiKey = getEnv("API_SHARED_SECRET");
   if (!apiKey) return null;
   const res = await fetch(`${apiUrl}/v1/user/me`, {
     headers: {
@@ -39,8 +40,8 @@ export const syncProfile = createServerFn({ method: "POST" })
     const session = await resolveSession();
     if (!session) return { ok: false, error: "no_session" } as const;
 
-    const apiUrl = process.env.API_URL || "";
-    const apiKey = process.env.API_SHARED_SECRET;
+    const apiUrl = getEnv("API_URL");
+    const apiKey = getEnv("API_SHARED_SECRET");
     if (!apiKey) return { ok: false, error: "api_key_not_configured" } as const;
 
     const headers: Record<string, string> = {
@@ -86,8 +87,8 @@ export const syncWorkoutDone = createServerFn({ method: "POST" })
   .handler(async ({ data: { workoutDone } }) => {
     const session = await resolveSession();
     if (!session) return { ok: false };
-    const apiUrl = process.env.API_URL || "";
-    const apiKey = process.env.API_SHARED_SECRET;
+    const apiUrl = getEnv("API_URL");
+    const apiKey = getEnv("API_SHARED_SECRET");
     if (!apiKey) return { ok: false };
     const res = await fetch(`${apiUrl}/v1/logs/today`, {
       method: "PUT",
@@ -105,9 +106,9 @@ export const syncWorkoutDone = createServerFn({ method: "POST" })
 export const fetchSubscription = createServerFn({ method: "POST" }).handler(async () => {
     const session = await resolveSession();
     if (!session) return { data: { subscription: null } };
-    const apiKey = process.env.API_SHARED_SECRET;
+    const apiKey = getEnv("API_SHARED_SECRET");
     if (!apiKey) return { data: { subscription: null } };
-    const res = await fetch(`${process.env.API_URL || ""}/v1/user/subscription`, {
+    const res = await fetch(`${getEnv("API_URL")}/v1/user/subscription`, {
       method: "GET",
       headers: {
         "X-Api-Key": apiKey,

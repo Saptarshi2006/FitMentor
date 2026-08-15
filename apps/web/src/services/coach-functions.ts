@@ -3,6 +3,7 @@ import { getCookie } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { chatCompletion, type ChatMessage } from "./ai-gateway.server";
 import { resolveSessionFromToken } from "@/utils/session";
+import { getEnv } from "@/utils/env";
 
 const Input = z.object({
   session_id: z.string().optional(),
@@ -37,7 +38,7 @@ const Input = z.object({
   user_email: z.string().optional(),
 });
 
-const apiUrl = process.env.API_URL || "";
+const apiUrl = () => getEnv("API_URL");
 
 export const askCoach = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => Input.parse(d))
@@ -87,8 +88,8 @@ ${profileBlock}`;
 
     if (sub) {
       try {
-        const apiKey = process.env.API_SHARED_SECRET;
-        const subRes = await fetch(`${apiUrl}/v1/user/subscription`, {
+        const apiKey = getEnv("API_SHARED_SECRET");
+        const subRes = await fetch(`${apiUrl()}/v1/user/subscription`, {
           headers: {
             "X-Api-Key": apiKey ?? "",
             "X-User-Id": sub,
@@ -103,13 +104,13 @@ ${profileBlock}`;
     }
 
     const messages: ChatMessage[] = [{ role: "system", content: system }, ...data.messages];
-    const reply = await chatCompletion({ messages, userId: sub, tier });
+    const reply = await chatCompletion({ messages, userId: sub ?? undefined, tier });
 
     if (sub) {
-      const apiKey = process.env.API_SHARED_SECRET;
+      const apiKey = getEnv("API_SHARED_SECRET");
       const lastUserMsg = [...data.messages].reverse().find((m) => m.role === "user");
       try {
-        const res = await fetch(`${apiUrl}/v1/coach/log`, {
+        const res = await fetch(`${apiUrl()}/v1/coach/log`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

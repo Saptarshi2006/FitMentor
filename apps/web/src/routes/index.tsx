@@ -75,7 +75,7 @@ function Landing() {
               </Link>
             )}
             <p className="text-xs text-muted-foreground">
-              Sign in with Discord • Free to start
+              Sign in with Google • Free to start
             </p>
           </div>
         </div>
@@ -132,7 +132,7 @@ function Landing() {
           <div className="relative">
             <h2 className="text-2xl font-bold">Ready to start?</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Sign in with Discord and get your custom plan in 30 seconds.
+              Sign in with Google and get your custom plan in 30 seconds.
             </p>
             {checking ? null : (
               <Link

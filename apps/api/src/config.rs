@@ -47,9 +47,9 @@ impl Config {
             planner_url: std::env::var("PLANNER_URL")
                 .unwrap_or_else(|_| "http://planner:8002".into()),
             cors_origin: std::env::var("CORS_ORIGIN")
-                .unwrap_or_else(|_| "https://fitmentor-7lx.pages.dev".into()),
+                .unwrap_or_else(|_| "https://fitmentor-ey9.pages.dev".into()),
             app_url: std::env::var("APP_URL")
-                .unwrap_or_else(|_| "https://fitmentor-7lx.pages.dev".into()),
+                .unwrap_or_else(|_| "https://fitmentor-ey9.pages.dev".into()),
         }
     }
 }

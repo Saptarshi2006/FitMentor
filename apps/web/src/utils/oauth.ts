@@ -1,13 +1,28 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getCookie, setResponseHeader } from "@tanstack/react-start/server";
-import { getSession, createSession, deleteSession, renewSession, deleteRememberToken, extractSessionId, resolveSessionFromToken, getCloudflareEnv } from "@/utils/session";
+import { getSession, createSession, deleteSession, renewSession, deleteRememberToken, extractSessionId, resolveSessionFromToken } from "@/utils/session";
+import { getEnv } from "@/utils/env";
 import { useState, useEffect } from "react";
 
-interface DiscordUser {
+type Provider = "google";
+
+interface ProviderUser {
   id: string;
-  username: string;
+  name: string;
   email?: string;
-  avatar?: string;
+}
+
+interface ProviderConfig {
+  clientIdEnv: string;
+  clientSecretEnv: string;
+  scope: string;
+  callbackPath: string;
+  authUrl: string;
+  tokenUrl: string;
+  subPrefix: string;
+  emailFallback: string;
+  exchangeToken: (code: string, redirectUri: string, clientId: string, clientSecret: string) => Promise<{ accessToken: string; user: ProviderUser }>;
+  fetchUser: (accessToken: string) => Promise<ProviderUser>;
 }
 
 const SESSION_COOKIE = "fitmentor_session";
@@ -22,14 +37,213 @@ function clearSessionCookie() {
   setResponseHeader("Set-Cookie", `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`);
 }
 
+function getAppUrl(): string {
+  return getEnv("APP_URL") || "https://fitmentor-ey9.pages.dev";
+}
+
+function base64UrlDecode(str: string): string {
+  let base64 = str.replace(/-/g, "+").replace(/_/g, "/");
+  while (base64.length % 4) base64 += "=";
+  const bin = atob(base64);
+  const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+function decodeJwtPayload(token: string): Record<string, unknown> {
+  const parts = token.split(".");
+  if (parts.length < 2) return {};
+  try {
+    return JSON.parse(base64UrlDecode(parts[1])) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+const providers: Record<Provider, ProviderConfig> = {
+  google: {
+    clientIdEnv: "GOOGLE_CLIENT_ID",
+    clientSecretEnv: "GOOGLE_CLIENT_SECRET",
+    scope: "openid email profile",
+    callbackPath: "/auth/google/callback",
+    authUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+    tokenUrl: "https://oauth2.googleapis.com/token",
+    subPrefix: "google",
+    emailFallback: "google",
+    exchangeToken: async (code, redirectUri, clientId, clientSecret) => {
+      const res = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: redirectUri,
+        }),
+      });
+      if (!res.ok) throw new Error(`token_exchange_failed:${res.status}:${await res.text()}`);
+      const data = (await res.json()) as { access_token?: string; id_token?: string };
+      if (!data.id_token) throw new Error("id_token_missing");
+      const claims = decodeJwtPayload(data.id_token);
+      return {
+        accessToken: data.access_token || "",
+        user: {
+          id: String(claims.sub || ""),
+          name: String(claims.name || claims.given_name || ""),
+          email: claims.email ? String(claims.email) : undefined,
+        },
+      } as { accessToken: string; user: ProviderUser };
+    },
+    fetchUser: async () => {
+      return { id: "", name: "" };
+    },
+  },
+};
+
+function buildAuthUrl(provider: Provider, mode?: string): string {
+  const cfg = providers[provider];
+  const clientId = getEnv(cfg.clientIdEnv);
+  const appUrl = getAppUrl();
+  const redirectUri = `${appUrl.replace(/\/+$/, "")}${cfg.callbackPath}`;
+  const url = new URL(cfg.authUrl);
+  url.searchParams.set("client_id", clientId);
+  url.searchParams.set("redirect_uri", redirectUri);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("scope", cfg.scope);
+  if (provider === "google") {
+    url.searchParams.set("prompt", "select_account");
+  }
+  if (mode) {
+    url.searchParams.set("state", mode);
+  }
+  return url.toString();
+}
+
+const codec = (d: { code: string; state?: string }) => d;
+
+function getClientIp(): string {
+  try {
+    const key = Symbol.for("tanstack-start:event-storage");
+    const store = (globalThis as any)[key]?.getStore?.();
+    const event: any = store?.h3Event;
+    const headers = event?.req?.headers;
+    if (!headers) return "";
+    return headers["cf-connecting-ip"]
+      || (headers["x-forwarded-for"] as string)?.split(",")[0]?.trim()
+      || headers["x-real-ip"]
+      || "";
+  } catch {
+    return "";
+  }
+}
+
+function getApiKey(): string {
+  return getEnv("API_SHARED_SECRET");
+}
+
+async function checkUserExists(sub: string): Promise<boolean> {
+  const apiUrl = getEnv("API_URL");
+  const apiKey = getApiKey();
+  if (!apiKey) return false;
+  try {
+    const res = await fetch(`${apiUrl}/v1/user/exists`, {
+      headers: {
+        "X-Api-Key": apiKey,
+        "X-User-Id": sub,
+        "Content-Type": "application/json",
+      },
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    return data.exists === true;
+  } catch {
+    return false;
+  }
+}
+
+async function syncUser(sub: string, email: string, name: string): Promise<boolean> {
+  const apiUrl = getEnv("API_URL");
+  const apiKey = getApiKey();
+  if (!apiKey) return false;
+  try {
+    const res = await fetch(`${apiUrl}/v1/user/sync`, {
+      method: "POST",
+      headers: {
+        "X-Api-Key": apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ cf_sub: sub, email, name }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function exchangeProviderCode(provider: Provider, code: string, state?: string) {
+  const cfg = providers[provider];
+  const clientId = getEnv(cfg.clientIdEnv);
+  const clientSecret = getEnv(cfg.clientSecretEnv);
+  const appUrl = getAppUrl();
+  const redirectUri = `${appUrl.replace(/\/+$/, "")}${cfg.callbackPath}`;
+
+  let exchange: { accessToken: string; user: ProviderUser };
+  try {
+    exchange = await cfg.exchangeToken(code, redirectUri, clientId, clientSecret);
+    const user = await cfg.fetchUser(exchange.accessToken);
+    if (user.id && !exchange.user.id) exchange.user = user;
+    if (user.email && !exchange.user.email) exchange.user.email = user.email;
+    if (user.name && !exchange.user.name) exchange.user.name = user.name;
+  } catch (e: any) {
+    return { ok: false, error: e?.message || "token_exchange_failed" } as const;
+  }
+
+  const { user } = exchange;
+  if (!user.id) return { ok: false, error: "userinfo_failed" } as const;
+
+  const sub = `${cfg.subPrefix}:${user.id}`;
+  const email = user.email || `${user.id}@${cfg.emailFallback}`;
+  const name = user.name || email;
+
+  const userExists = await checkUserExists(sub);
+  const mode = state || "signin";
+
+  if (userExists && mode === "signup") {
+    return { ok: false, error: "user_exists" } as const;
+  }
+  if (!userExists && mode === "signin") {
+    return { ok: false, error: "user_not_found" } as const;
+  }
+
+  if (mode === "signup" && !userExists) {
+    await syncUser(sub, email, name);
+  }
+
+  const ip = getClientIp();
+  const sid = await createSession({
+    sub,
+    email,
+    name,
+    provider,
+    ip,
+  });
+  if (!sid) return { ok: false, error: "session_create_failed" } as const;
+
+  setSessionCookie(sid);
+
+  return {
+    ok: true,
+    user: { sub, email, name, provider },
+    userExists,
+  } as const;
+}
+
 export const checkSession = createServerFn({ method: "GET" }).handler(async () => {
   const raw = getCookie(SESSION_COOKIE);
   if (raw) {
-    // Try signed token first (no KV needed)
     const ip = getClientIp();
     const session = await resolveSessionFromToken(raw, ip);
     if (session) return { ok: true } as const;
-    // Legacy: try raw sid with KV
     const sid = await extractSessionId(raw);
     if (sid) {
       const kvSession = await getSession(sid);
@@ -51,7 +265,6 @@ export const getCurrentUser = createServerFn({ method: "GET" }).handler(async ()
   const ip = getClientIp();
   const session = await resolveSessionFromToken(raw, ip);
   if (session) return session;
-  // Legacy: try raw sid with KV
   const sid = await extractSessionId(raw);
   if (!sid) return null;
   const kvSession = await getSession(sid);
@@ -67,164 +280,13 @@ export function useAuth() {
   return user;
 }
 
-export const getDiscordAuthUrl = createServerFn({ method: "GET" })
+export const getGoogleAuthUrl = createServerFn({ method: "GET" })
   .validator((d?: { mode?: string }) => d ?? {})
-  .handler(async (ctx) => {
-    const cfEnv = getCloudflareEnv() as Record<string, string> | null;
-    const clientId = process.env.DISCORD_CLIENT_ID || cfEnv?.DISCORD_CLIENT_ID || "";
-    const appUrl = process.env.APP_URL || cfEnv?.APP_URL || "https://fitmentor-7lx.pages.dev";
-    const redirectUri = `${appUrl.replace(/\/+$/, "")}/auth/discord/callback`;
-    const url = new URL("https://discord.com/api/oauth2/authorize");
-    url.searchParams.set("client_id", clientId);
-    url.searchParams.set("redirect_uri", redirectUri);
-    url.searchParams.set("response_type", "code");
-    url.searchParams.set("scope", "identify email");
-    if (ctx.data.mode) {
-      url.searchParams.set("state", ctx.data.mode);
-    }
-    return url.toString();
-  });
+  .handler(async (ctx) => buildAuthUrl("google", ctx.data.mode));
 
-const discordCodec = (d: { code: string; state?: string }) => d;
-
-function getClientIp(): string {
-  try {
-    const key = Symbol.for("tanstack-start:event-storage");
-    const store = (globalThis as any)[key]?.getStore?.();
-    const event: any = store?.h3Event;
-    const headers = event?.req?.headers;
-    if (!headers) return "";
-    return headers["cf-connecting-ip"]
-      || (headers["x-forwarded-for"] as string)?.split(",")[0]?.trim()
-      || headers["x-real-ip"]
-      || "";
-  } catch {
-    return "";
-  }
-}
-
-function getApiKey(): string {
-  const fromProcess = process.env.API_SHARED_SECRET;
-  if (fromProcess) return fromProcess;
-  const cfEnv = getCloudflareEnv();
-  if (cfEnv) return (cfEnv.API_SHARED_SECRET as string) ?? "";
-  return "";
-}
-
-async function checkUserExists(sub: string): Promise<boolean> {
-  const cfEnv = getCloudflareEnv() as Record<string, string> | null;
-  const apiUrl = process.env.API_URL || cfEnv?.API_URL || "";
-  const apiKey = getApiKey();
-  if (!apiKey) return false;
-  try {
-    const res = await fetch(`${apiUrl}/v1/user/exists`, {
-      headers: {
-        "X-Api-Key": apiKey,
-        "X-User-Id": sub,
-        "Content-Type": "application/json",
-      },
-    });
-    if (!res.ok) return false;
-    const data = await res.json();
-    return data.exists === true;
-  } catch {
-    return false;
-  }
-}
-
-async function syncUser(sub: string, email: string, name: string): Promise<boolean> {
-  const cfEnv = getCloudflareEnv() as Record<string, string> | null;
-  const apiUrl = process.env.API_URL || cfEnv?.API_URL || "";
-  const apiKey = getApiKey();
-  if (!apiKey) return false;
-  try {
-    const res = await fetch(`${apiUrl}/v1/user/sync`, {
-      method: "POST",
-      headers: {
-        "X-Api-Key": apiKey,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ cf_sub: sub, email, name }),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
-export const exchangeDiscordCode = createServerFn({ method: "POST" })
-  .validator(discordCodec)
-  .handler(async (ctx) => {
-    const { code, state } = ctx.data;
-
-    const cfEnv = getCloudflareEnv() as Record<string, string> | null;
-    const clientId = process.env.DISCORD_CLIENT_ID || cfEnv?.DISCORD_CLIENT_ID || "";
-    const clientSecret = process.env.DISCORD_CLIENT_SECRET || cfEnv?.DISCORD_CLIENT_SECRET || "";
-    const appUrl = process.env.APP_URL || cfEnv?.APP_URL || "https://fitmentor-7lx.pages.dev";
-    const redirectUri = `${appUrl.replace(/\/+$/, "")}/auth/discord/callback`;
-
-    const tokenRes = await fetch("https://discord.com/api/oauth2/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        grant_type: "authorization_code",
-        code,
-        redirect_uri: redirectUri,
-      }),
-    });
-
-    if (!tokenRes.ok) {
-      const errBody = await tokenRes.text();
-      console.error("Discord token exchange failed:", tokenRes.status, errBody, "redirect_uri:", redirectUri, "client_id:", clientId, "has_secret:", !!clientSecret, "secret_len:", clientSecret?.length);
-      return { ok: false, error: `token_exchange_failed: ${errBody}` } as const;
-    }
-    const tokenData = await tokenRes.json();
-
-    const userRes = await fetch("https://discord.com/api/users/@me", {
-      headers: { Authorization: `Bearer ${tokenData.access_token}` },
-    });
-    if (!userRes.ok) return { ok: false, error: "userinfo_failed" } as const;
-    const discordUser: DiscordUser = await userRes.json();
-
-    const sub = `discord:${discordUser.id}`;
-    const email = discordUser.email || `${discordUser.username}@discord`;
-
-    // Check if user already exists in the database
-    const userExists = await checkUserExists(sub);
-    const mode = state || "signin"; // "signup" or "signin"
-
-    if (userExists && mode === "signup") {
-      return { ok: false, error: "user_exists" } as const;
-    }
-    if (!userExists && mode === "signin") {
-      return { ok: false, error: "user_not_found" } as const;
-    }
-
-    // On signup, sync user to the database first
-    if (mode === "signup" && !userExists) {
-      await syncUser(sub, email, discordUser.username);
-    }
-
-    const ip = getClientIp();
-    const sid = await createSession({
-      sub,
-      email,
-      name: discordUser.username,
-      provider: "discord",
-      ip,
-    });
-    if (!sid) return { ok: false, error: "session_create_failed" } as const;
-
-    setSessionCookie(sid);
-
-    return {
-      ok: true,
-      user: { sub, email, name: discordUser.username, provider: "discord" },
-      userExists,
-    } as const;
-  });
+export const exchangeGoogleCode = createServerFn({ method: "POST" })
+  .validator(codec)
+  .handler(async (ctx) => exchangeProviderCode("google", ctx.data.code, ctx.data.state));
 
 export function logout() {
   window.location.href = "/";

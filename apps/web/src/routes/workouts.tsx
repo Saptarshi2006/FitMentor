@@ -122,7 +122,7 @@ function Workouts() {
                         const log = ensureToday();
                         saveLog({ ...log, workoutDone: true });
                         setWorkoutDone(true);
-                        sync({ workoutDone: true });
+                        sync({ data: { workoutDone: true } });
                         toast.success("Workout logged!");
                       }}
                     >

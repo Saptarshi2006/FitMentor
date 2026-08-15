@@ -1,9 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getCookie } from "@tanstack/react-start/server";
 import { getSession as getKvSession, extractSessionId } from "@/utils/session";
+import { getEnv } from "@/utils/env";
 
 const SESSION_COOKIE = "fitmentor_session";
-const API_URL = process.env.API_URL || "";
+const API_URL = () => getEnv("API_URL");
 
 async function headers(): Promise<Record<string, string>> {
   const raw = getCookie(SESSION_COOKIE);
@@ -12,7 +13,7 @@ async function headers(): Promise<Record<string, string>> {
   if (!session?.sub) throw new Error("Not authenticated");
   return {
     "Content-Type": "application/json",
-    "X-Api-Key": process.env.API_SHARED_SECRET ?? "",
+    "X-Api-Key": getEnv("API_SHARED_SECRET") ?? "",
     "X-User-Id": session.sub,
     "X-User-Email": session.email,
   };
@@ -41,7 +42,7 @@ export type FullSession = {
 
 export const listSessions = createServerFn({ method: "POST" }).handler(async () => {
   const h = await headers();
-  const res = await fetch(`${API_URL}/v1/coach/sessions`, { headers: h });
+  const res = await fetch(`${API_URL()}/v1/coach/sessions`, { headers: h });
   if (!res.ok) throw new Error(await res.text());
   return res.json() as Promise<SessionListItem[]>;
 });
@@ -50,7 +51,7 @@ export const createSession = createServerFn({ method: "POST" })
   .validator((d: unknown) => d as { title?: string })
   .handler(async ({ data }) => {
     const h = await headers();
-    const res = await fetch(`${API_URL}/v1/coach/sessions`, {
+    const res = await fetch(`${API_URL()}/v1/coach/sessions`, {
       method: "POST",
       headers: h,
       body: JSON.stringify({ title: data.title }),
@@ -63,7 +64,7 @@ export const loadSession = createServerFn({ method: "POST" })
   .validator((d: unknown) => d as { id: string })
   .handler(async ({ data }) => {
     const h = await headers();
-    const res = await fetch(`${API_URL}/v1/coach/sessions/${data.id}`, { headers: h });
+    const res = await fetch(`${API_URL()}/v1/coach/sessions/${data.id}`, { headers: h });
     if (!res.ok) throw new Error(await res.text());
     return res.json() as Promise<FullSession>;
   });
@@ -72,7 +73,7 @@ export const deleteSession = createServerFn({ method: "POST" })
   .validator((d: unknown) => d as { id: string })
   .handler(async ({ data }) => {
     const h = await headers();
-    const res = await fetch(`${API_URL}/v1/coach/sessions/${data.id}`, {
+    const res = await fetch(`${API_URL()}/v1/coach/sessions/${data.id}`, {
       method: "DELETE",
       headers: h,
     });

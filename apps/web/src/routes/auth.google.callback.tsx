@@ -1,13 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { exchangeDiscordCode } from "@/utils/oauth";
+import { exchangeGoogleCode } from "@/utils/oauth";
 
-export const Route = createFileRoute("/auth/discord/callback")({
+export const Route = createFileRoute("/auth/google/callback")({
   head: () => ({ meta: [{ title: "Signing in — FitMentor" }] }),
-  component: DiscordCallback,
+  component: GoogleCallback,
 });
 
-function DiscordCallback() {
+function GoogleCallback() {
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -17,17 +17,17 @@ function DiscordCallback() {
       setError(
         errorParam === "consent_required"
           ? "Please authorize the app by signing in with the button below"
-          : "Discord authorization was cancelled or denied",
+          : "Google authorization was cancelled or denied",
       );
       return;
     }
     const code = params.get("code");
     if (!code) {
-      setError("No authorization code received from Discord");
+      setError("No authorization code received from Google");
       return;
     }
     const state = params.get("state") || "";
-    exchangeDiscordCode({ data: { code, state } }).then((result) => {
+    exchangeGoogleCode({ data: { code, state } }).then((result) => {
       if (result.ok) {
         // New user → go to onboarding; existing user → go to dashboard
         if (result.userExists === false) {
@@ -36,9 +36,9 @@ function DiscordCallback() {
           window.location.replace("/dashboard");
         }
       } else if (result.error === "user_exists") {
-        setError("An account already exists with this Discord. Please sign in instead.");
+        setError("An account already exists with this Google account. Please sign in instead.");
       } else if (result.error === "user_not_found") {
-        setError("No account found with this Discord. Please sign up first.");
+        setError("No account found with this Google account. Please sign up first.");
       } else {
         setError(result.error || "Authentication failed");
       }
@@ -66,7 +66,7 @@ function DiscordCallback() {
             href={ctaHref}
             className="mt-4 inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
           >
-            {ctaLabel} with Discord
+            {ctaLabel} with Google
           </a>
         </div>
       </div>

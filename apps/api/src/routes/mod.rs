@@ -1,5 +1,4 @@
 pub mod ai_plans;
-pub mod auth;
 pub mod coach_log;
 pub mod coach_sessions;
 pub mod health;
@@ -17,9 +16,6 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         // Health
         .route("/v1/health", axum::routing::get(health::health))
-        // Auth
-        .route("/v1/auth/discord", axum::routing::get(auth::discord_login))
-        .route("/v1/auth/callback", axum::routing::get(auth::discord_callback))
         // User & Profile
         .route("/v1/user/me", axum::routing::get(user::get_me))
         .route("/v1/user/exists", axum::routing::get(user::check_user_exists))
