@@ -97,14 +97,13 @@ async fn process_coach_log(
 ) {
     let messages = &event.messages;
     let _ = sqlx::query(
-        "INSERT INTO coach_logs (user_id, container_tag, messages)
-         VALUES ($1, $2, $3)
+        "INSERT INTO coach_logs (user_id, container_tag)
+         VALUES ($1, $2)
          ON CONFLICT (user_id, container_tag)
-         DO UPDATE SET messages = $3",
+         DO NOTHING",
     )
     .bind(&event.user_id)
     .bind(&event.container_tag)
-    .bind(messages)
     .execute(pool)
     .await;
 

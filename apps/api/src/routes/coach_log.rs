@@ -34,15 +34,16 @@ pub async fn log(
     .unwrap_or_else(|| "free".to_string());
 
     let messages = req.messages.clone().unwrap_or(serde_json::json!([]));
+    // coach_logs no longer has a messages column (dropped by migration 007);
+    // keep the row for container tracking but store conversation in chat_sessions.
     sqlx::query(
-        "INSERT INTO coach_logs (user_id, container_tag, messages)
-         VALUES ($1, $2, $3)
+        "INSERT INTO coach_logs (user_id, container_tag)
+         VALUES ($1, $2)
          ON CONFLICT (user_id, container_tag)
-         DO UPDATE SET messages = $3",
+         DO NOTHING",
     )
     .bind(&user_id)
     .bind(&req.container_tag)
-    .bind(&messages)
     .execute(&state.pool)
     .await?;
 
