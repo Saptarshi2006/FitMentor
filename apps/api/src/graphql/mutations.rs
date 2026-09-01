@@ -339,6 +339,49 @@ impl MutationRoot {
 
         Ok(result.rows_affected() > 0)
     }
+
+    /// Rename a coach chat session (AI-generated or manual)
+    async fn update_coach_session_title(
+        &self,
+        ctx: &async_graphql::Context<'_>,
+        id: Uuid,
+        title: String,
+    ) -> async_graphql::Result<GqlChatSession> {
+        let gql_ctx = ctx.data::<GqlContext>()?;
+        let auth = gql_ctx.require_user()?;
+        let pool = gql_ctx.pool_for_user();
+
+        let clean = title.trim().chars().take(40).collect::<String>();
+        if clean.is_empty() {
+            return Err(async_graphql::Error::new("Title cannot be empty"));
+        }
+
+        #[derive(sqlx::FromRow)]
+        struct Row {
+            id: Uuid,
+            user_id: String,
+            title: String,
+            messages: serde_json::Value,
+        }
+        let row = sqlx::query_as::<_, Row>(
+            r#"UPDATE chat_sessions SET title = $1, updated_at = now()
+               WHERE id = $2 AND user_id = $3
+               RETURNING id, user_id, title, messages"#,
+        )
+        .bind(&clean)
+        .bind(id)
+        .bind(&auth.user_id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| async_graphql::Error::new("Session not found"))?;
+
+        Ok(GqlChatSession {
+            id: row.id,
+            user_id: row.user_id,
+            title: row.title,
+            messages: row.messages,
+        })
+    }
 }
 
 async fn get_user_id(pool: &sqlx::PgPool, cf_sub: &str) -> async_graphql::Result<crate::models::user::User> {

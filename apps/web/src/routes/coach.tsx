@@ -5,13 +5,13 @@ import { useProfile, calcTargets } from "@/utils/profile";
 import { useAuth } from "@/utils/oauth";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { Sparkles, Send, Menu, Plus, Trash2, History, MessageSquare } from "lucide-react";
+import { Sparkles, Send, Menu, Plus, Trash2, History, MessageSquare, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import { getClient } from "@/lib/graphql/client";
 import { COACH_SESSIONS_QUERY, COACH_SESSION_QUERY } from "@/lib/graphql/queries";
-import { CREATE_COACH_SESSION_MUTATION, DELETE_COACH_SESSION_MUTATION } from "@/lib/graphql/mutations";
-import { askCoach } from "@/services/coach-functions";
+import { CREATE_COACH_SESSION_MUTATION, DELETE_COACH_SESSION_MUTATION, UPDATE_COACH_SESSION_TITLE_MUTATION } from "@/lib/graphql/mutations";
+import { askCoach, generateChatTitle } from "@/services/coach-functions";
 import { useServerFn } from "@tanstack/react-start";
 
 export const Route = createFileRoute("/coach")({
@@ -66,6 +66,7 @@ ${buildSystemPrompt(profile)}`;
 
 function Coach() {
   const ask = useServerFn(askCoach);
+  const genTitle = useServerFn(generateChatTitle);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -143,23 +144,42 @@ function Coach() {
     }
   }
 
+  const isFirstMessage = messages.length === 0;
+
+  async function maybeGenerateTitle(sid: string, userText: string, currentTitle: string | undefined) {
+    if (currentTitle && currentTitle !== "New Chat") return;
+    try {
+      const { title } = await genTitle({ data: { userMessage: userText } });
+      const client = getClient();
+      await client.request(UPDATE_COACH_SESSION_TITLE_MUTATION, { id: sid, title });
+      loadSessions();
+    } catch {
+      // non-critical
+    }
+  }
+
   async function send(text: string) {
     const q = text.trim();
     if (!q || loading) return;
     const profileWithTargets = profile ? { ...profile, ...calcTargets(profile) } : undefined;
 
     let sid = activeId;
+    let createdNow = false;
     if (!sid) {
       try {
         const client = getClient();
         const data = await client.request<{ createCoachSession: { id: string } }>(CREATE_COACH_SESSION_MUTATION);
         sid = data.createCoachSession.id;
         setActiveId(sid);
+        createdNow = true;
       } catch {
         toast.error("Could not create session");
         return;
       }
     }
+
+    const curTitle = sessions.find((s) => s.id === sid)?.title;
+    const shouldTitle = createdNow || isFirstMessage || curTitle === "New Chat" || !curTitle;
 
     const newMsgs: Msg[] = [...messages, { role: "user", content: q }];
     setMessages(newMsgs);
@@ -172,11 +192,30 @@ function Coach() {
       });
       setMessages([...newMsgs, { role: "assistant", content: res.reply }]);
       loadSessions();
+      if (shouldTitle) {
+        // fire-and-forget AI title
+        maybeGenerateTitle(sid, q, curTitle);
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Coach is unavailable right now.";
       toast.error(msg);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function renameSession(id: string) {
+    const cur = sessions.find((s) => s.id === id)?.title ?? "";
+    const next = window.prompt("Rename chat", cur);
+    if (next === null) return;
+    const clean = next.trim().slice(0, 40);
+    if (!clean || clean === cur) return;
+    try {
+      const client = getClient();
+      await client.request(UPDATE_COACH_SESSION_TITLE_MUTATION, { id, title: clean });
+      setSessions((prev) => prev.map((s) => (s.id === id ? { ...s, title: clean } : s)));
+    } catch {
+      toast.error("Could not rename");
     }
   }
 
@@ -238,6 +277,16 @@ function Coach() {
                           {s.messageCount} messages
                         </p>
                       </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          renameSession(s.id);
+                        }}
+                        className="mt-0.5 shrink-0 rounded p-1 text-muted-foreground opacity-0 transition hover:text-foreground group-hover:opacity-100"
+                        title="Rename"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
                       <button
                         onClick={(e) => removeSession(e, s.id)}
                         className="mt-0.5 shrink-0 rounded p-1 text-muted-foreground opacity-0 transition hover:text-destructive group-hover:opacity-100"

@@ -137,3 +137,42 @@ ${profileBlock}`;
 
     return { reply };
   });
+
+export const generateChatTitle = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({ userMessage: z.string().min(1).max(500) })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    try {
+      const prompt = data.userMessage.slice(0, 200);
+      const raw = await chatCompletion({
+        messages: [
+          {
+            role: "system",
+            content:
+              "Summarize the user's fitness question in 3-5 words. No punctuation, no quotes, no emojis. Example: 'Protein for muscle gain'",
+          },
+          { role: "user", content: prompt },
+        ],
+        tier: "free",
+      });
+      let title = raw
+        .split("\n")[0]
+        .replace(/["'.,!?]/g, "")
+        .trim()
+        .slice(0, 40);
+      if (!title) title = prompt.slice(0, 40);
+      // Capitalize words
+      title = title
+        .split(/\s+/)
+        .slice(0, 5)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(" ");
+      return { title };
+    } catch {
+      const fb = data.userMessage.slice(0, 40).trim();
+      return { title: fb || "New Chat" };
+    }
+  });
